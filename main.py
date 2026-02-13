@@ -1,62 +1,87 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-# -----------------------
-# Parameters
-# -----------------------
-L = 100                 # half system size
-N = 2 * L + 1           # total sites
-t = 1.0                 # hopping
-mu_L = 0.5             # left chemical potential
-mu_R = -0.5              # right chemical potential
-E_F = 0.0               # Fermi energy (T=0)
+kB = 8.617333262e-5
 
-# -----------------------
-# Lattice coordinates
-# -----------------------
-x = np.arange(-L, L + 1)
-print(x)
-# Chemical potential profile
-mu = np.where(x < 0, mu_L, mu_R)
-print(mu)
-# -----------------------
-# Hamiltonian
-# -----------------------
-H = np.zeros((N, N), dtype=float)
+def fermi_dirac(E, T, mu=0):
+    x = (E - mu) / (2 * kB * T)
+    occ = 0.0
 
-# Onsite terms
-for i in range(N):
-    H[i, i] = mu[i]
+    if T<0.5:
+        occ = np.where(E < mu, 1.0, 0.0)
+    else:
+        occ = 0.5*(1-np.tanh(x))
 
-# Nearest-neighbor hopping
-for i in range(N - 1):
-    H[i, i + 1] = -t
-    H[i + 1, i] = -t
+    return occ
 
-# -----------------------
-# Diagonalize
-# -----------------------
-E, psi = np.linalg.eigh(H)
+def H_spinon(mu, h, t, Z, N, sites):
+    H = np.zeros((sites,sites))
+    
+    for i in range(sites-1):
+        H[i,i] = N*(mu[i] - h[i])
+        H[i,i+1] = -N*t*np.sqrt(Z[i]*Z[i+1])
+        H[i+1,i] = -N*t*np.sqrt(Z[i]*Z[i+1])
 
-# -----------------------
-# Fill states (T=0)
-# -----------------------
-occupied = E < E_F
+    H[sites-1,sites-1] = N*(mu[sites-1]-h[sites-1])
+    
+    return H
 
-# -----------------------
-# Charge density
-# n(x) = sum_{occupied} |psi_n(x)|^2
-# -----------------------
-density = np.sum(np.abs(psi[:, occupied])**2, axis=1)
+def H_MF_rotor(hub_pot, h, K, ang_mom_sites, i):
+    H = np.zeros((ang_mom_sites, ang_mom_sites))
 
-# -----------------------
-# Plot
-# -----------------------
-plt.figure(figsize=(7,4))
-plt.plot(x, density, lw=2)
-plt.axvline(0, color='k', ls='--', alpha=0.5)
-plt.xlabel("x")
-plt.ylabel("Charge density ⟨n_x⟩")
-plt.title("Charge distribution across chemical potential step")
-plt.tight_layout()
-plt.show()
+    for l in range(ang_mom_sites-1):
+        H[l,l] = (hub_pot/2)*l*l+h[i]*l
+        H[l,l+1] = K[i]/2
+        H[l+1,l] = K[i]/2
+
+    return H
+
+def get_K(U, t, Z, T, spinon_eigvals, sites):
+    K = np.zeros(sites)
+
+    for i in range(sites):
+        Ki = 0
+        for j in range(sites):
+            Ki += -4*t*(U.conj()[i,j])*(U[i+1,j]*np.sqrt(Z[i+1]) + U[i-1,j]*np.sqrt(Z[i-1]))*fermi_dirac(spinon_eigvals[j],T)
+        K[i] = Ki
+    
+    return K
+
+def main():
+    t = 1
+    N = 2
+    hub_pot = 1
+    T = 300
+
+    REAL_SITES = 51
+    REAL_HALF_SITES = int(REAL_SITES/2-0.5)
+
+    ang_mom_sites = 10
+
+    # Initial parameter guess
+    h = np.zeros(REAL_SITES)
+
+    mu = np.zeros(REAL_SITES)
+    mu[:REAL_HALF_SITES] = -0.5
+    mu[REAL_HALF_SITES:] = 0.5
+
+    Z = np.full(101,0.1)
+
+    # Construct Hamiltonians
+    Hf = H_spinon(mu,h,t,Z,N,REAL_SITES)
+
+    # Fermion Hamiltonian eigenstates are many-spinon states. 
+    # Single-spinon states are NOT eigenstates despite the variable name.
+    spinon_eigvals, spinon_eigvecs = np.linalg.eig(Hf)
+
+
+    K = get_K(spinon_eigvecs, t, Z, T, spinon_eigvals, REAL_SITES)
+    Htheta = H_MF_rotor(hub_pot, h, K, ang_mom_sites, 0)
+
+    rotor_eigvals, rotor_eigvecs = np.linalg.eig(Htheta)
+
+    print(rotor_eigvals)
+
+
+if __name__ == '__main__':
+    main()
