@@ -1,7 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-kB = 8.617333262e-5
+# TODO: Correct for periodic boundary conditions, make neater as well
+
+# eV (Figure out realistic values later, doesn't matter for now)
+kB = 8.61e-5
 
 def fermi_dirac(E, T, mu=0):
     x = (E - mu) / (2 * kB * T)
