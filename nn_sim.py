@@ -6,17 +6,6 @@ import matplotlib.pyplot as plt
 # eV (Figure out realistic values later, doesn't matter for now)
 kB = 8.61e-5
 
-def fermi_dirac(E, T, mu=0):
-    x = (E - mu) / (2 * kB * T)
-    occ = 0.0
-
-    if T<0.5:
-        occ = np.where(E < mu, 1.0, 0.0)
-    else:
-        occ = 0.5*(1-np.tanh(x))
-
-    return occ
-
 def H_spinon(mu, h, t, Z, N, sites):
     H = np.zeros((sites,sites))
     
