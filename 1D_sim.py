@@ -1,6 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import time
+import warnings
+import sys 
+
+warnings.simplefilter("error", RuntimeWarning)
 
 from globals import *
 from helpers import *
@@ -15,7 +19,7 @@ L_CUT = 2
 # Going to make it variable, increasing towards the junction to reduce the computational complexity
 ROTOR_DIM = 1 + 2 * L_CUT 
 N_AT = 2
-T = 300
+T = 10
 BETA = KB_EV * T
 PBC = True
 FINISH = False 
@@ -44,6 +48,9 @@ def get_L(rotor_site_eigenvals, rotor_site_eigenvecs):
     for i in range(SITES):
         # Pick rotor energies and states for each site
         rotor_eigenvals = rotor_site_eigenvals[i]
+        min_eigenval = np.min(rotor_eigenvals)
+        rotor_eigenvals = rotor_eigenvals - np.full(ROTOR_DIM, min_eigenval)
+
         rotor_eigenvecs = rotor_site_eigenvecs[i]
 
         num_sum = 0.0
@@ -52,9 +59,14 @@ def get_L(rotor_site_eigenvals, rotor_site_eigenvecs):
         # Sum over rotor energies and states
         for j in range(ROTOR_DIM):
             rotor_energy = rotor_eigenvals[j]
+
             rotor_eigenvec = rotor_eigenvecs[:,j]
 
-            boltzmann_factor = np.exp(-BETA*rotor_energy)
+            try:
+                boltzmann_factor = np.exp(-BETA*rotor_energy)
+            except RuntimeWarning:
+                print(f'Rotor energy: {rotor_energy}')
+                sys.exit()
 
             # Sum over rotor Hilbert space in |l> basis forming the rotor state
             for index in range(ROTOR_DIM):
@@ -71,24 +83,26 @@ def get_L(rotor_site_eigenvals, rotor_site_eigenvecs):
 Returns array of Z values for each lattice site
 """
 def get_Z(rotor_site_eigenvals, rotor_site_eigenvecs):
-    Z = np.zeros(SITES, dtype=complex)
-    
+    Z = np.zeros(SITES)
+
     for i in range (SITES):
         # Pick out rotor states and energies at site i
         rotor_eigenvals = rotor_site_eigenvals[i]
+        min_eigenval = np.min(rotor_eigenvals)
+        rotor_eigenvals = rotor_eigenvals - np.full(ROTOR_DIM, min_eigenval)
+
         rotor_eigenvecs = rotor_site_eigenvecs[i]
-        
+
         num_sum = 0.0
         den_sum = 0.0
-
-        for m in range(ROTOR_DIM):
-            print(f'Eigenvector {m}: {rotor_eigenvecs[:,m]}')
-            
+        
         # Sum over rotor states and energies. There are ROTOR_DIM total eigenstates
         for j in range (ROTOR_DIM):
-            rotor_energy = rotor_eigenvals[j]
             rotor_state = rotor_eigenvecs[:,j]
-            #print(f'State {j}: {rotor_state}\n')
+
+            # Shift all energies by minimum energy to suppress Boltzmann factors
+            rotor_energy = rotor_eigenvals[j]
+
             boltzmann_factor = np.exp(-BETA*rotor_energy)
 
             # Sum over rotor Hilbert space in |l> basis forming the rotor state
@@ -101,14 +115,13 @@ def get_Z(rotor_site_eigenvals, rotor_site_eigenvecs):
                     num_sum += boltzmann_factor * np.conj(rotor_state[index])*rotor_state[index - 1]
                 else:
                     num_sum += boltzmann_factor * np.conj(rotor_state[index])*(rotor_state[index + 1] + rotor_state[index - 1])
-        
             # Partition function, make function and calculate once?
             den_sum += boltzmann_factor
-        
-        print(f'Numerator {i}: {num_sum}')
-        print(f'Denominator {i}: {den_sum}')
-        Z[i] = (num_sum/(2*den_sum))**2
 
+        num_sum = np.real(num_sum)
+        den_sum = np.real(den_sum)
+        Z[i] = (num_sum/(2*den_sum))**2
+    print(f'Z: {Z}')
     return Z
 
 """
@@ -143,10 +156,10 @@ Return array of rotor Hamiltonians at each site
 """
 def get_H_rotors(U, h, K):
     
-    H_sites = np.zeros((SITES, ROTOR_DIM, ROTOR_DIM))
+    H_sites = np.zeros((SITES, ROTOR_DIM, ROTOR_DIM), dtype=complex)
 
     for i in range(SITES):
-        H = np.zeros((ROTOR_DIM, ROTOR_DIM))
+        H = np.zeros((ROTOR_DIM, ROTOR_DIM), dtype=complex)
 
         for index in range(ROTOR_DIM):
             l = index - L_CUT
@@ -164,7 +177,7 @@ def get_H_rotors(U, h, K):
 """
 Return K
 """
-def get_K(t_eff, Z, spinon_eigenvals, spinon_eigenvecs):
+def get_K(t, Z, spinon_eigenvals, spinon_eigenvecs):
     K = np.zeros(SITES, dtype=complex)
 
     for i in range(SITES):
@@ -179,9 +192,9 @@ def get_K(t_eff, Z, spinon_eigenvals, spinon_eigenvecs):
         for j in range(SITES):
             for k in range(SITES):
                 energy = spinon_eigenvals[k]
-                sum += t_eff[i,j] * spinon_eigenvecs.conj().T[k,i] * spinon_eigenvecs[j,k] * fermi_dirac(energy, T)
+                sum += t[np.abs(i-j)] * spinon_eigenvecs.conj().T[k,i] * spinon_eigenvecs[j,k] * fermi_dirac(energy, T)
         
-        K[i] = -(2 * N_AT / np.sqrt(Z[i])) * sum
+        K[i] = -(2 * N_AT) * sum
 
         return K
 
@@ -199,7 +212,7 @@ def update(t, U, mu, h, Z, K):
     h_minus_dh = h - np.full(SITES, dh/2)
 
     t_eff = get_t_eff(t, Z)
-    print(f't_eff: {t_eff}')
+    
     """
     Calculate Hamiltonians needed for parameters
     """
@@ -222,7 +235,7 @@ def update(t, U, mu, h, Z, K):
     H_rotors = get_H_rotors(U, h, K)
     for i in range(SITES):
         rotor_site_eigenvals[i], rotor_site_eigenvecs[i] = np.linalg.eigh(H_rotors[i])
-    print(f'Rotor Hamiltonian: \n{H_rotors[1]}')
+
     # H_\theta(h+dh/2)
     rotor_site_eigenvecs_plus_dh = np.zeros((SITES, ROTOR_DIM, ROTOR_DIM), dtype=complex)
     rotor_site_eigenvals_plus_dh = np.zeros((SITES, ROTOR_DIM))
@@ -248,21 +261,19 @@ def update(t, U, mu, h, Z, K):
     L_minus_dh = get_L(rotor_site_eigenvals_minus_dh, rotor_site_eigenvecs_minus_dh)
 
     Z_prime = get_Z(rotor_site_eigenvals, rotor_site_eigenvecs)
-    K_prime = get_K(t_eff, Z, spinon_eigenvals, spinon_eigenvecs)
+    K_prime = get_K(t, Z, spinon_eigenvals, spinon_eigenvecs)
     h_prime = np.zeros(SITES)
 
     for i in range(SITES):
         num = nf[i] - L[i] - N_AT/2
         den = (nf_plus_dh[i] - nf_minus_dh[i])/dh - (L_plus_dh[i] - L_minus_dh[i])/dh
-    
+        print(f'Numerator: {num}')
+        print(f'Denominator: {den}')
         h_prime[i] = h[i] - num/den
         
     return h_prime, Z_prime, K_prime, nf
 
-if __name__ == '__main__':
-    h = np.zeros(SITES)
-    print(h + np.full(SITES, 0.1))
-    
+if __name__ == '__main__':    
     # Define Hamiltonian parameters
     U = 10.0
     N = 2
@@ -281,19 +292,15 @@ if __name__ == '__main__':
     Z = np.full(SITES, 0.1)
     K = np.full(SITES, 0.1)
 
-    print('INITIAL PARAMS')
-    print(f'h: {h}')
-    print(f'Z: {Z}')
-    print(f'K: {K}')
+    num_updates = 0
+
     while True:
         h_prime, Z, K, nf = update(t, U, mu, h, Z, K)
+        num_updates += 1
+
         if np.all(h - h_prime < 1e-4):
             h = h_prime
             print('DONE')
             break
         else:
             h = h_prime
-    print('AFTER PARAMS')
-    print(f'h: {h}')
-    print(f'Z: {Z}')
-    print(f'K: {K}')
