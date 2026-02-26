@@ -9,7 +9,7 @@ SITES = 5
 HALF_SITES = int(SITES/2.0 - 0.5)
 
 # Constant L_CUT for all sites. Expect to need higher cuts near the depletion layer
-L_CUT = 5
+L_CUT = 2
 
 # Dimension of the rotor Hilbert space
 # Going to make it variable, increasing towards the junction to reduce the computational complexity
@@ -71,7 +71,7 @@ def get_L(rotor_site_eigenvals, rotor_site_eigenvecs):
 Returns array of Z values for each lattice site
 """
 def get_Z(rotor_site_eigenvals, rotor_site_eigenvecs):
-    Z = np.zeros(SITES)
+    Z = np.zeros(SITES, dtype=complex)
     
     for i in range (SITES):
         # Pick out rotor states and energies at site i
@@ -81,11 +81,14 @@ def get_Z(rotor_site_eigenvals, rotor_site_eigenvecs):
         num_sum = 0.0
         den_sum = 0.0
 
+        for m in range(ROTOR_DIM):
+            print(f'Eigenvector {m}: {rotor_eigenvecs[:,m]}')
+            
         # Sum over rotor states and energies. There are ROTOR_DIM total eigenstates
         for j in range (ROTOR_DIM):
             rotor_energy = rotor_eigenvals[j]
             rotor_state = rotor_eigenvecs[:,j]
-            print(rotor_state)
+            #print(f'State {j}: {rotor_state}\n')
             boltzmann_factor = np.exp(-BETA*rotor_energy)
 
             # Sum over rotor Hilbert space in |l> basis forming the rotor state
@@ -101,8 +104,9 @@ def get_Z(rotor_site_eigenvals, rotor_site_eigenvecs):
         
             # Partition function, make function and calculate once?
             den_sum += boltzmann_factor
-        print(num_sum)
-        print(den_sum)
+        
+        print(f'Numerator {i}: {num_sum}')
+        print(f'Denominator {i}: {den_sum}')
         Z[i] = (num_sum/(2*den_sum))**2
 
     return Z
@@ -139,18 +143,19 @@ Return array of rotor Hamiltonians at each site
 """
 def get_H_rotors(U, h, K):
     
-    H_sites = np.zeros((SITES, ROTOR_DIM, ROTOR_DIM), dtype=complex)
+    H_sites = np.zeros((SITES, ROTOR_DIM, ROTOR_DIM))
 
     for i in range(SITES):
-        H = np.zeros((ROTOR_DIM, ROTOR_DIM), dtype=complex)
+        H = np.zeros((ROTOR_DIM, ROTOR_DIM))
 
         for index in range(ROTOR_DIM):
             l = index - L_CUT
             H[index, index] = (U / 2) * l * l + h[i] * l
 
             if index < ROTOR_DIM - 1:
-                H[index, index + 1] = K[i] / 2
-                H[index + 1, index]
+                off_diag = K[i] / 2
+                H[index, index + 1] = off_diag 
+                H[index + 1, index] = off_diag 
 
         H_sites[i] = H
 
@@ -194,6 +199,7 @@ def update(t, U, mu, h, Z, K):
     h_minus_dh = h - np.full(SITES, dh/2)
 
     t_eff = get_t_eff(t, Z)
+    print(f't_eff: {t_eff}')
     """
     Calculate Hamiltonians needed for parameters
     """
@@ -216,7 +222,7 @@ def update(t, U, mu, h, Z, K):
     H_rotors = get_H_rotors(U, h, K)
     for i in range(SITES):
         rotor_site_eigenvals[i], rotor_site_eigenvecs[i] = np.linalg.eigh(H_rotors[i])
-    
+    print(f'Rotor Hamiltonian: \n{H_rotors[1]}')
     # H_\theta(h+dh/2)
     rotor_site_eigenvecs_plus_dh = np.zeros((SITES, ROTOR_DIM, ROTOR_DIM), dtype=complex)
     rotor_site_eigenvals_plus_dh = np.zeros((SITES, ROTOR_DIM))
@@ -269,21 +275,25 @@ if __name__ == '__main__':
 
     # Doping setup
     mu = np.zeros(SITES)
-    mu[:HALF_SITES] = mu_L
-    mu[HALF_SITES:] = mu_R 
+    mu[:HALF_SITES] = mu_L; mu[HALF_SITES:] = mu_R 
 
-    h = np.zeros(SITES)
+    h = np.full(SITES, 0.1)
     Z = np.full(SITES, 0.1)
-    K = np.zeros(SITES, dtype=complex)
+    K = np.full(SITES, 0.1)
 
+    print('INITIAL PARAMS')
+    print(f'h: {h}')
+    print(f'Z: {Z}')
+    print(f'K: {K}')
     while True:
         h_prime, Z, K, nf = update(t, U, mu, h, Z, K)
-        break
-        print(Z)
         if np.all(h - h_prime < 1e-4):
             h = h_prime
+            print('DONE')
             break
         else:
             h = h_prime
-    print(Z)
-    print(nf)
+    print('AFTER PARAMS')
+    print(f'h: {h}')
+    print(f'Z: {Z}')
+    print(f'K: {K}')
