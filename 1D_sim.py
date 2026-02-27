@@ -13,7 +13,7 @@ SITES = 5
 HALF_SITES = int(SITES/2.0 - 0.5)
 
 # Constant L_CUT for all sites. Expect to need higher cuts near the depletion layer
-L_CUT = 2
+L_CUT = 5
 
 # Dimension of the rotor Hilbert space
 # Going to make it variable, increasing towards the junction to reduce the computational complexity
@@ -121,7 +121,7 @@ def get_Z(rotor_site_eigenvals, rotor_site_eigenvecs):
         num_sum = np.real(num_sum)
         den_sum = np.real(den_sum)
         Z[i] = (num_sum/(2*den_sum))**2
-    print(f'Z: {Z}')
+
     return Z
 
 """
@@ -196,7 +196,7 @@ def get_K(t, Z, spinon_eigenvals, spinon_eigenvecs):
         
         K[i] = -(2 * N_AT) * sum
 
-        return K
+    return K
 
 """
     Returns the next iteration of the Lagrange parameters using Newton's method
@@ -206,10 +206,13 @@ def get_K(t, Z, spinon_eigenvals, spinon_eigenvecs):
     TODO: Find a closed form analytic solution using perturbation theory
     NOTE: Analytic solutions may not be possible due to recursion
 """
-def update(t, U, mu, h, Z, K):
+def update(t, U, mu, h, Z, K, num_updates):
     dh = 0.01
     h_plus_dh = h + np.full(SITES, dh/2)
     h_minus_dh = h - np.full(SITES, dh/2)
+
+    print(f'h_plus_dh: {h_plus_dh}')
+    print(f'h_minus_dh: {h_minus_dh}')
 
     t_eff = get_t_eff(t, Z)
     
@@ -267,18 +270,25 @@ def update(t, U, mu, h, Z, K):
     for i in range(SITES):
         num = nf[i] - L[i] - N_AT/2
         den = (nf_plus_dh[i] - nf_minus_dh[i])/dh - (L_plus_dh[i] - L_minus_dh[i])/dh
+
+        print(f'SITE: {i}')
+        print(f'nf_plus_dh[{i}]: {nf_plus_dh[i]}')
+        print(f'nf_minus_dh[{i}]: {nf_minus_dh[i]}')
+        print(f'L_plus_dh[{i}]: {nf_plus_dh[i]}')
+        print(f'L_minus_dh[{i}]: {L_minus_dh[i]}')
         print(f'Numerator: {num}')
-        print(f'Denominator: {den}')
+        print(f'Denominator: {den}\n\n')
+
         h_prime[i] = h[i] - num/den
         
     return h_prime, Z_prime, K_prime, nf
 
 if __name__ == '__main__':    
-    # Define Hamiltonian parameters
+    # Define system parameters
     U = 10.0
     N = 2
-    mu_L = -0.5
-    mu_R = 0.5
+    mu_L = -1.0
+    mu_R = 1.0
 
     t0 = 1.0
     t = np.zeros(SITES)
@@ -288,17 +298,17 @@ if __name__ == '__main__':
     mu = np.zeros(SITES)
     mu[:HALF_SITES] = mu_L; mu[HALF_SITES:] = mu_R 
 
-    h = np.full(SITES, 0.1)
+    h = np.full(SITES, 1.0)
     Z = np.full(SITES, 0.1)
     K = np.full(SITES, 0.1)
 
-    num_updates = 0
+    num_updates = 1
 
     while True:
-        h_prime, Z, K, nf = update(t, U, mu, h, Z, K)
+        h_prime, Z, K, nf = update(t, U, mu, h, Z, K, num_updates)
         num_updates += 1
 
-        if np.all(h - h_prime < 1e-4):
+        if np.all(np.abs(h - h_prime) < 1e-4):
             h = h_prime
             print('DONE')
             break
