@@ -53,8 +53,8 @@ def test_init_params():
                                 })
                             except Exception as e:
                                 break
-                # Gives a sense of time for completion
-    print(len(success_data))
+        # Gives a sense of time for completion
+        print(len(success_data))
 
     return np.array(success_data)
 
