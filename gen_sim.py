@@ -9,11 +9,11 @@ warnings.simplefilter("error", RuntimeWarning)
 from globals import *
 from helpers import *
 
-SITES = 20
+SITES = 100
 HALF_SITES = int(SITES/2.0 - 0.5)
 
 # Constant L_CUT for all sites. Expect to need higher cuts near the depletion layer
-L_CUT = 10
+L_CUT = 15
 
 # Dimension of the rotor Hilbert space
 # Going to make it variable, increasing towards the junction to reduce the computational complexity
@@ -95,8 +95,6 @@ def get_Z(rotor_site_eigenvals, rotor_site_eigenvecs):
         # Sum over rotor states and energies. There are ROTOR_DIM total eigenstates
         for j in range (ROTOR_DIM):
             rotor_state = rotor_eigenvecs[:,j]
-
-            # Shift all energies by minimum energy to suppress Boltzmann factors
             rotor_energy = rotor_eigenvals[j]
 
             boltzmann_factor = np.exp(-BETA*rotor_energy)
@@ -244,9 +242,10 @@ def update(t, U, mu, h, Z, K):
     L_plus_dh = get_L(rotor_site_eigenvals_plus_dh, rotor_site_eigenvecs_plus_dh)
     L_minus_dh = get_L(rotor_site_eigenvals_minus_dh, rotor_site_eigenvecs_minus_dh)
 
-    Z_prime = get_Z(rotor_site_eigenvals, rotor_site_eigenvecs)
-    K_prime = get_K(t, Z, spinon_eigenvals, spinon_eigenvecs)
     h_prime = np.zeros(SITES)
+    Z_prime = get_Z(rotor_site_eigenvals, rotor_site_eigenvecs)
+    # print(f"Z' - Z: {Z_prime - Z}")
+    K_prime = get_K(t, Z, spinon_eigenvals, spinon_eigenvecs)
 
     for i in range(SITES):
         num = nf[i] - L[i] - N_AT/2
@@ -291,6 +290,7 @@ if __name__ == '__main__':
             Z[i] = 0.05
         else:
             Z[i] = 0.20
+
     K = np.full(SITES, U/8)
 
     num_updates = 1
