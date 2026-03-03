@@ -13,7 +13,7 @@ SITES = 100
 HALF_SITES = int(SITES/2.0 - 0.5)
 
 # Constant L_CUT for all sites. Expect to need higher cuts near the depletion layer
-L_CUT = 15
+L_CUT = 30
 
 # Dimension of the rotor Hilbert space
 # Going to make it variable, increasing towards the junction to reduce the computational complexity
@@ -247,10 +247,30 @@ def update(t, U, mu, h, Z, K):
     # print(f"Z' - Z: {Z_prime - Z}")
     K_prime = get_K(t, Z, spinon_eigenvals, spinon_eigenvecs)
 
+    J = np.zeros((SITES, SITES))
+
+    nf_d_diag = (nf_plus_dh - nf_minus_dh)/dh
+    L_d_diag = (L_plus_dh - L_minus_dh)/dh
+    np.fill_diagonal(J, nf_d_diag - L_d_diag)
+
+    for i in range(SITES - 3):
+        J[i,i+1] = -0.1 * J[i,i]
+        J[i+1,i] = -0.1 * J[i,i]
+        J[i,i+2] = -0.01 * J[i,i]
+        J[i+2,i] = -0.01 * J[i,i]
+        J[i+3,i] = -0.001 * J[i,i]
+        J[i,i+3] = -0.001 * J[i,i]
+    delta = nf - L - np.full(SITES,N_AT/2)
+    dh_vec = np.linalg.solve(J, -delta)
+
+    h_prime = h + dh_vec
+                
+    """
     for i in range(SITES):
         num = nf[i] - L[i] - N_AT/2
         den = (nf_plus_dh[i] - nf_minus_dh[i])/dh - (L_plus_dh[i] - L_minus_dh[i])/dh
-        """
+
+        '''
         print(f'\n SITE: {i}')
         print(f'Z_prime[{i}]: {Z[i]}')
         print(f'K_prime[{i}]: {K_prime[i]}')
@@ -261,9 +281,9 @@ def update(t, U, mu, h, Z, K):
         print(f'L_minus_dh[{i}]: {L_minus_dh[i]}')
         print(f'Numerator: {num}')
         print(f'Denominator: {den}\n\n')
-        """
+        '''
         h_prime[i] = h[i] - num/den
-        
+    """
     return h_prime, Z_prime, K_prime, nf
 
 if __name__ == '__main__':    
