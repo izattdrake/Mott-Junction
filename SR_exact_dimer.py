@@ -4,11 +4,14 @@ import itertools
 
 from helpers import delta
 
-L_CUT = 3
+L_CUT = 2
 ROTOR_DIM = (2 * L_CUT + 1)
 SPINON_DIM = 16
 DIM = SPINON_DIM * ROTOR_DIM * ROTOR_DIM
 
+"""
+    Returns the basis of 6 quantum numbers, ordered by their index
+"""
 def get_basis():
     ell_vals = range(-L_CUT, L_CUT + 1)
     basis = list(itertools.product(
@@ -16,7 +19,6 @@ def get_basis():
         [0,1], [0,1],
         ell_vals, ell_vals
     ))
-
     return basis
 
 """
@@ -58,18 +60,38 @@ def get_matrix_element(epsilon, U, t, q_nums, q_nums_prime):
     
 def get_H(epsilon, U, t, basis):
     H = np.zeros((DIM, DIM))
-    count = 0
+
     for i in range(DIM):
         q_nums = basis[i]
+
         for j in range(DIM):
             q_nums_prime = basis[j]
             H[i,j] = get_matrix_element(epsilon, U, t, q_nums, q_nums_prime)
-            count += 1
-            print(count)
+
     return H
 
-def get_exact_energy(t,U):
-    return
+"""
+    Takes the exact SR Hamiltonian's eigenvectors and eigenvalues then returns states satisfying the number constraint and their respective eigenvalues
+"""
+def get_phys_from_q_nums(H, basis):
+    mixed_vals, mixed_vecs = np.linalg.eigh(H)
+    phys_vals, phys_states = [], []
+
+    for i in range(DIM):
+        q_nums = basis[i]
+        n1_up, n1_down, n2_up, n2_down, l1, l2 = q_nums
+    
+        occ1 = n1_up + n1_down
+        occ2 = n2_up + n2_down
+
+        if (l1 - occ1 + 1 == 0) and (l2 - occ2 + 1 == 0):
+            phys_val, phys_state = mixed_vals[i], mixed_vecs[:,i]
+            phys_vals.append(phys_val)
+            phys_states.append(phys_state)
+
+    phys_vals, phys_states = np.array(phys_vals), np.array(phys_states).T
+
+    return phys_vals, phys_states
 
 if __name__ == '__main__':
     epsilon = 0.0
@@ -77,8 +99,7 @@ if __name__ == '__main__':
     t = 1.0
 
     basis = get_basis()
+
     H = get_H(epsilon, U, t, basis)
-    print('got H')
-    eigenvals, eigenvecs = np.linalg.eigh(H)
-    print(eigenvals)
-    
+    phys_vals, phys_states = get_phys_from_q_nums(H, basis)
+    print(phys_states[:,5])
