@@ -1,6 +1,15 @@
 import numpy as np
 from globals import *
 
+"""
+    Kronecker Delta function
+"""
+def delta(x, y):
+    return int(x == y)
+
+"""
+    Fermi-Dirac distribution function
+"""
 def fermi_dirac(E, beta, mu=0):
     x = (E - mu) * beta / 2
     occ = 0.0
