@@ -20,3 +20,15 @@ def fermi_dirac(E, beta, mu=0):
         occ = 0.5*(1-np.tanh(x))
 
     return occ
+
+"""
+    Partition function
+"""
+def partition(energies, beta):
+    sum = 0.0
+
+    for energy in energies:
+        boltzmann = np.exp(-beta * energy)
+        sum += np
+
+    return sum
