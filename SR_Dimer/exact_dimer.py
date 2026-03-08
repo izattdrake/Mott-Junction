@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import itertools
 
-from helpers import delta
+from SR_General.utility.helpers import delta
 
 L_CUT = 2
 ROTOR_DIM = (2 * L_CUT + 1)

@@ -1,5 +1,5 @@
 import numpy as np
-from globals import *
+from SR_Dimer.utility.globals import *
 
 """
     Kronecker Delta function

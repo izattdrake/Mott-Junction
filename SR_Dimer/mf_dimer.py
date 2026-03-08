@@ -3,9 +3,10 @@ import matplotlib.pyplot as plt
 import time
 import warnings
 import sys 
+import os
 
-from ..globals import *
-from helpers import fermi_dirac
+from SR_Dimer.utility.globals import *
+from SR_Dimer.utility.helpers import fermi_dirac
 
 warnings.simplefilter("error", RuntimeWarning)
 
@@ -15,13 +16,11 @@ L_MAX = 5
 # Dimension of the rotor Hilbert space
 # Going to make it variable, increasing towards the junction to reduce the computational complexity
 ROTOR_DIM = 1 + 2 * L_MAX 
-SPINON_DIM = 4 * 4
+SPINON_DIM = 4
 DIM = 4 * 4 * ROTOR_DIM * ROTOR_DIM
 N_AT = 2
 T = 300
 BETA = 10.0
-
-FINISH = False 
 
 def get_nf(spinon_eigvals, spinon_eigvecs):
     nf = np.zeros(2)
@@ -128,7 +127,7 @@ I think we only have to diagonalize a single one of these blocks, but I am not s
 def get_H_spinon(t_eff, mu, h):
     H = np.zeros((2, 2))
 
-    np.fill_diagonal(H, mu + H)
+    np.fill_diagonal(H, mu + h)
     H[0,1], H[1,0] = -t_eff, -t_eff
 
     return H
@@ -142,7 +141,7 @@ def get_H_rotors(U, h, K):
     l_vals = np.arange(-L_MAX, L_MAX + 1)
 
     for i in range(2):
-        H_rotor = np.zeros((ROTOR_DIM, ROTOR_DIM))
+        H = np.zeros((ROTOR_DIM, ROTOR_DIM))
 
         diag = ((U / 2.0) * l_vals + h[i]) * l_vals
         np.fill_diagonal(H, diag)
@@ -158,7 +157,7 @@ def get_H_rotors(U, h, K):
 """
 Return K
 """
-def get_K(t, spinon_eigvals, spinon_eigvecs):
+def get_K(t, Z, spinon_eigvals, spinon_eigvecs):
     K = np.zeros(2)
 
     sum0 = 0.0
@@ -166,11 +165,10 @@ def get_K(t, spinon_eigvals, spinon_eigvecs):
     
     for i in range(2):
         energy = spinon_eigvals[i]
-        sum0 += t * spinon_eigvecs.conj().T[i,0] * spinon_eigvecs[1,i] * fermi_dirac(energy, BETA)
-        sum1 += t * spinon_eigvecs.conj().T[i,1] * spinon_eigvecs[0,i] * fermi_dirac(energy, BETA)
+        sum0 += t * np.sqrt(Z[1]) * spinon_eigvecs.conj().T[i,0] * spinon_eigvecs[1,i] * fermi_dirac(energy, BETA)
+        sum1 += t * np.sqrt(Z[0]) * spinon_eigvecs.conj().T[i,1] * spinon_eigvecs[0,i] * fermi_dirac(energy, BETA)
     
-    K[0] = -2 * N_AT * sum0
-    K[1] = -2 * N_AT * sum1
+    K[0], K[1] = -2 * N_AT * sum0, -2 * N_AT * sum1
 
     return K
 
@@ -246,8 +244,6 @@ def update(t, U, mu, h, Z, K):
     L_d_diag = (L_plus_dh - L_minus_dh)/dh
     np.fill_diagonal(J, nf_d_diag - L_d_diag)
 
-    J[1,0], J[0,1] = -J[0,0], -J[1,1]
-
     delta = nf - L - 1
     dh_vec = np.linalg.solve(J, -delta)
 
@@ -284,19 +280,30 @@ if __name__ == '__main__':
     mu = np.zeros(2)
 
     h = np.zeros(2)
-    Z = np.full(2, 0.1)
-    K = np.full(2, -U/8)
+    Z = np.full(2, 0.3)
+    K = np.full(2, -0.1)
 
     did_converge = False
     
     for i in range(50):
         h_prime, Z, K, nf = update(t, U, mu, h, Z, K)
 
-        if np.all(np.abs(h - h_prime) < 1e-4):
+        if np.all(np.abs(h - h_prime) < 1e-40):
+            """
+            print(f'h: {h}')
+            print(f'h_prime: {h_prime}')
+            print(f'Z: {Z}')
+            print(f'K: {K}')
+            print(f'nf: {nf}')
+            """
+
             h = h_prime
             break
         else:
             h = h_prime
 
+    H_rotors = get_H_rotors(U, h, K)
+    rotor_eigvals, rotor_eigvecs = np.linalg.eigh(H_rotors[0])
+    print(rotor_eigvecs[0])
 
     
