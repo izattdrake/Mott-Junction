@@ -2,10 +2,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 import json
 
-from gen_sim import *
-from globals import *
-from helpers import *
+from SR_junction_sim import *
 
+
+"""
+    This script tests initial Hubbard parameter convergence for a 1D Hubbard chain
+    Parameters that successfully converge will have the corresponding charge distribution plotted
+"""
 def test_init_params():
     N = 2
 
@@ -43,7 +46,7 @@ def test_init_params():
                             for i in range(200):
                                 h_updated, Z, K, nf = update(t, U, mu, h, Z, K)
                                 print(Z)
-                                if np.all(np.abs(h - h_updated) < 1e-3):
+                                if np.all(np.abs(h - h_updated) < 1e-4):
                                     good_params.append({
                                             't': t0,
                                             'U': U_val,
