@@ -206,7 +206,7 @@ def get_K(t, Z, spinon_eigenvals, spinon_eigenvecs):
         for j in range(SITES):
             for k in range(SITES):
                 energy = spinon_eigenvals[k]
-                sum += t[np.abs(i-j)] * spinon_eigenvecs.conj().T[k,i] * spinon_eigenvecs[j,k] * fermi_dirac(energy, BETA)
+                sum += t[np.abs(i-j)] * np.sqrt(Z[j]) * spinon_eigenvecs.conj().T[k,i] * spinon_eigenvecs[j,k] * fermi_dirac(energy, BETA)
         
         K[i] = -(2 * N_AT) * sum
 
@@ -284,10 +284,7 @@ def update(t, U, mu, h, Z, K):
     L_d_diag = (L_plus_dh - L_minus_dh)/dh
     np.fill_diagonal(J, nf_d_diag - L_d_diag)
 
-    for i in range(SITES - 1):
-        J[i,i+1] = -0.1 * J[i,i]
-        J[i+1,i] = -0.1 * J[i,i]
-
+    
     delta = nf - L - np.full(SITES,N_AT/2)
     dh_vec = np.linalg.solve(J, -delta)
 
