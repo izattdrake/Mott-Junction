@@ -4,6 +4,8 @@ import time
 import warnings
 import sys 
 
+from utility.helpers import *
+
 warnings.simplefilter("error", RuntimeWarning)
 
 SITES = 100
@@ -20,40 +22,6 @@ T = 300
 BETA = 10.0
 PBC = True
 FINISH = False 
-KB_SI = 1.380649 * 10**(-23)
-KB_EV = 8.617333262 * 10**(-5)
-
-"""
-    Kronecker Delta function
-"""
-def delta(x, y):
-    return int(x == y)
-
-"""
-    Fermi-Dirac distribution function
-"""
-def fermi_dirac(E, beta, mu=0):
-    x = (E - mu) * beta / 2
-    occ = 0.0
-
-    if beta > 500:
-        occ = np.where(E < mu, 1.0, 0.0)
-    else:
-        occ = 0.5*(1-np.tanh(x))
-
-    return occ
-
-"""
-    Partition function
-"""
-def partition(energies, beta):
-    sum = 0.0
-
-    for energy in energies:
-        boltzmann = np.exp(-beta * energy)
-        sum += np
-
-    return sum
 
 def get_nf(spinon_eigenvals, spinon_eigenvecs):
     nf = np.zeros(SITES)
@@ -167,7 +135,7 @@ Return real-space spinon Hamiltonian
 def get_H_spinon(t_eff, mu, h):
     H = np.zeros((SITES, SITES))
 
-    diag = mu + h
+    diag = -(mu + h)
     np.fill_diagonal(H, diag)
     H += -t_eff
 
@@ -284,69 +252,8 @@ def update(t, U, mu, h, Z, K):
     L_d_diag = (L_plus_dh - L_minus_dh)/dh
     np.fill_diagonal(J, nf_d_diag - L_d_diag)
 
-    
     delta = nf - L - np.full(SITES,N_AT/2)
     dh_vec = np.linalg.solve(J, -delta)
-
     h_prime = h + dh_vec
-                
-    """
-    for i in range(SITES):
-        num = nf[i] - L[i] - N_AT/2
-        den = (nf_plus_dh[i] - nf_minus_dh[i])/dh - (L_plus_dh[i] - L_minus_dh[i])/dh
 
-        '''
-        print(f'\n SITE: {i}')
-        print(f'Z_prime[{i}]: {Z[i]}')
-        print(f'K_prime[{i}]: {K_prime[i]}')
-        print(f'nf_plus_dh[{i}]: {nf_plus_dh[i]}')
-        print(f'nf_minus_dh[{i}]: {nf_minus_dh[i]}')
-        print(f'L[{i}]: {L[0]}')
-        print(f'L_plus_dh[{i}]: {nf_plus_dh[i]}')
-        print(f'L_minus_dh[{i}]: {L_minus_dh[i]}')
-        print(f'Numerator: {num}')
-        print(f'Denominator: {den}\n\n')
-        '''
-        h_prime[i] = h[i] - num/den
-    """
     return h_prime, Z_prime, K_prime, nf
-
-if __name__ == '__main__':    
-    # Define system parameters
-    U = 10.0
-    N = 2
-    mu_L = -1.0
-    mu_R = 1.0
-
-    t0 = 1.0
-    t = np.zeros(SITES)
-    t[1] = t0
-    t[2] = t0/10.0
-
-    # Doping setup
-    mu = np.zeros(SITES)
-    mu[:HALF_SITES] = mu_L; mu[HALF_SITES:] = mu_R 
-
-    h = np.full(SITES, 0.05)
-    # Z = np.full(SITES, 0.1)
-    Z = np.zeros(SITES)
-    for i in range(SITES):
-        if i < HALF_SITES:
-            Z[i] = 0.05
-        else:
-            Z[i] = 0.20
-
-    K = np.full(SITES, U/8)
-
-    num_updates = 1
-
-    while True:
-        h_prime, Z, K, nf = update(t, U, mu, h, Z, K)
-        num_updates += 1
-
-        if np.all(np.abs(h - h_prime) < 1e-4):
-            h = h_prime
-            print('DONE')
-            break
-        else:
-            h = h_prime

@@ -8,17 +8,17 @@ from SR_junction_sim import *
 """
     This script tests initial Hubbard parameter convergence for a 1D Hubbard chain
     Parameters that successfully converge will have the corresponding charge distribution plotted
+    Only 1 set of successful parameters right now
+    Can easily put more in for testing!
 """
 def test_init_params():
-    N = 2
-
     t = np.zeros(SITES)
     t0 = 1.0
     t[1] = t0; t[2] = t0/10.0
 
     U_vals = [10.0]
-    muL_vals = [0]
-    muR_vals = [0]
+    muL_vals = [0.1]
+    muR_vals = [-0.1]
     ZL_vals = [0.1]
     ZR_vals = [0.1]
     K_vals = np.zeros((1, SITES))

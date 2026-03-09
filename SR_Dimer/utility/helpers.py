@@ -1,5 +1,7 @@
 import numpy as np
-from SR_Dimer.utility.globals import *
+
+KB_SI = 1.380649 * 10**(-23)
+KB_EV = 8.617333262 * 10**(-5)
 
 """
     Kronecker Delta function
@@ -32,3 +34,13 @@ def partition(energies, beta):
         sum += np
 
     return sum
+
+"""
+Computes Z from U, k, and h with 1st-order perturbation theory
+Only accurate for very small Z close to the Mott transition
+"""
+def check_Z(U, K, h, nf, N_AT=2):
+    x = N_AT * (nf - 0.5)
+    Z = (2 * U * K/(U * U - 4 * (U * x + h))) ** 2
+
+    return Z

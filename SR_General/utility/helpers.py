@@ -1,5 +1,7 @@
 import numpy as np
-from SR_General.utility.globals import *
+
+KB_SI = 1.380649 * 10**(-23)
+KB_EV = 8.617333262 * 10**(-5)
 
 """
     Kronecker Delta function
