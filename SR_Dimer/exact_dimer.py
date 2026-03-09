@@ -11,7 +11,7 @@ SPINON_DIM = 16
 DIM = SPINON_DIM * ROTOR_DIM * ROTOR_DIM
 
 """
-    Returns the basis of 6 quantum numbers, ordered by their index
+    Returns spinon-rotor basis kets, organized by their 6 quantum numbers
 """
 def get_mixed_basis():
     ell_vals = range(-L_CUT, L_CUT + 1)
@@ -22,6 +22,9 @@ def get_mixed_basis():
     ))
     return basis
 
+"""
+    Returns physical spinon-rotor basis kets
+"""
 def get_phys_basis():
     basis = get_mixed_basis()
     phys_basis = []
@@ -34,6 +37,21 @@ def get_phys_basis():
             phys_basis.append(q_nums)
 
     return phys_basis
+
+"""
+    Returns physical spinon-rotor basis kets of definite particle number
+"""
+def get_def_particle_basis(num_particles):
+    basis = get_phys_basis()
+    def_particle_basis = []
+
+    for q_nums in basis:
+        n1_up, n1_down, n2_up, n2_down, l1, l2 = q_nums
+        
+        if n1_up + n1_down + n2_up + n2_down == num_particles:
+            def_particle_basis.append(q_nums)
+
+    return def_particle_basis
 
 """
     Takes 6 quantum numbers labeling the slave-rotor state and returns the basis index
@@ -57,22 +75,22 @@ def get_matrix_element(epsilon, U, t, q_nums, q_nums_prime):
             epsilon*(n1_up + n1_down + n2_up + n2_down) + (U/2)*(l1**2 + l2**2)
         ) * delta(n1_up, n1_up_prime) * delta(n1_down, n1_down_prime) * delta(n2_up, n2_up_prime) * delta(n2_down, n2_down_prime) * delta(l1, l1_prime) * delta(l2, l2_prime)
         - t * (
-              delta(0, n1_up_prime) * delta(1, n2_up_prime) 
+              ((-1) ** (n1_down_prime)) * delta(0, n1_up_prime) * delta(1, n2_up_prime) 
             * delta(n1_up, n1_up_prime + 1) * delta(n1_down, n1_down_prime)
             * delta(n2_up, n2_up_prime - 1) * delta(n2_down, n2_down_prime)
             * delta(l1, l1_prime + 1) * delta(l2, l2_prime - 1)
 
-            + delta(1, n1_up_prime) * delta(0, n2_up_prime) 
+            + ((-1) ** (n1_down_prime)) * delta(1, n1_up_prime) * delta(0, n2_up_prime) 
             * delta(n1_up, n1_up_prime - 1) * delta(n1_down, n1_down_prime)
             * delta(n2_up, n2_up_prime + 1) * delta(n2_down, n2_down_prime)
             * delta(l1, l1_prime - 1) * delta(l2, l2_prime + 1)
 
-            + delta(0, n1_down_prime) * delta(1, n2_down_prime)
+            + ((-1) ** (n2_up_prime)) * delta(0, n1_down_prime) * delta(1, n2_down_prime)
             * delta(n1_up, n1_up_prime) * delta(n1_down, n1_down_prime + 1) 
             * delta(n2_up, n2_up_prime) * delta(n2_down, n2_down_prime - 1)
             * delta(l1, l1_prime + 1) * delta(l2, l2_prime - 1)
 
-            + delta(1, n1_down_prime) * delta(0, n2_down_prime) 
+            + ((-1) ** (n2_up_prime)) * delta(1, n1_down_prime) * delta(0, n2_down_prime) 
             * delta(n1_up, n1_up_prime) * delta(n1_down, n1_down_prime - 1)
             * delta(n2_up, n2_up_prime) * delta(n2_down, n2_down_prime + 1)
             * delta(l1, l1_prime - 1) * delta(l2, l2_prime + 1)
@@ -81,6 +99,11 @@ def get_matrix_element(epsilon, U, t, q_nums, q_nums_prime):
 
     return mat_el
     
+
+"""
+    Returns a Hamiltonian constructed from a basis
+    Mixed, physical, or definite particle bases can be input to get the desired Hamiltonian
+"""
 def get_exact_H(epsilon, U, t, basis):
     dim = len(basis)
     H = np.zeros((dim, dim))
