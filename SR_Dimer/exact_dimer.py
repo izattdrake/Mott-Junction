@@ -63,6 +63,30 @@ def get_index(q_nums):
     return i
 
 """
+    Returns a matrix representation for the constraint operator of a site.
+    The constraint operator of site i=0,1 has 0 eigenvalues for physical states on site i
+    and non-zero eigenvalues for non-physical states on site i
+    Physical states must have zero eigenvalues on both dimer sites
+"""
+def get_constraint_operator(site):
+    mixed_basis = get_mixed_basis()
+    operator = np.zeros((DIM, DIM))
+
+    if (not site == 0) and (not site == 1):
+        raise ValueError('Site must equal 0 or 1.')
+    else:
+        for i in range(DIM):
+            q_nums = mixed_basis[i]
+            n1_up, n1_down, n2_up, n2_down, l1, l2 = q_nums
+            if site == 0:
+                operator[i,i] = l1 - (n1_up + n1_down) + 1
+            elif site == 1:
+                operator[i,i] = l2 - (n2_up + n2_down) + 1
+
+    return operator
+
+
+"""
     Look at the Latex document to see where I got this.
     An ugly Hamiltonian, it is
 """
