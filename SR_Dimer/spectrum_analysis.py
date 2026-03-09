@@ -108,7 +108,7 @@ if __name__ == '__main__':
     U = 10.0; t = 1.0; epsilon=1.0
 
     J_vals = np.arange(0,20)
-    plot_def_number_spectrum(epsilon, t, J_vals, PLOT_P0=True, PLOT_P1=True, PLOT_P2=True, PLOT_P3=True, PLOT_P4=True)
+    plot_def_number_spectrum(epsilon, t, J_vals, PLOT_P0=True, PLOT_P1=False, PLOT_P2=True, PLOT_P3=False, PLOT_P4=True)
         
     # MF iteration code that does not work
     for L_MAX in range(5, 30):
