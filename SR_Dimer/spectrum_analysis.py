@@ -33,12 +33,12 @@ def plot_spectrum(energies, J_vals):
     plt.figure()
 
     for J, E_list in zip(J_vals, energies):
-        plt.scatter([J]*len(E_list), E_list, marker='D',          # diamond marker
-                                             edgecolors='blue',   # outline color
-                                             facecolors='white',  # fill color
-                                             linewidths=1.5       # outline thickness
-)
-        plt
+        plt.scatter([J]*len(E_list), E_list, 
+                    marker='D',   
+                    edgecolors='blue',  
+                    facecolors='white',  
+                    linewidths=1.0       
+                    )
 
     plt.xlabel("U/t")
     plt.ylabel("Energies")
