@@ -16,6 +16,9 @@ def fermi_dirac(E, beta, mu=0):
     x = (E - mu) * beta / 2
     occ = 0.0
 
+    # Assume at large enough beta, the temperature is zero
+    # May solve computational singularities at small temperature
+    # Need to play around with it and understand natural energy scales better
     if beta > 500:
         occ = np.where(E < mu, 1.0, 0.0)
     else:
@@ -31,7 +34,7 @@ def partition(energies, beta):
 
     for energy in energies:
         boltzmann = np.exp(-beta * energy)
-        sum += np
+        sum += boltzmann
 
     return sum
 
