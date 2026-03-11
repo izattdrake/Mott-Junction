@@ -7,11 +7,22 @@ from utility.helpers import delta, partition
 """
     Returns |l_1 l_2> basis elements
 """
-def get_rotor_basis(l_max):
+def get_eff_rotor_basis(l_max):
     l_vals = np.arange(-l_max, l_max + 1)
-    basis = list(itertools.product(l_vals, l_vals))
+    basis = list(itertools.product(
+        l_vals, l_vals
+    ))
 
-    return basis
+    return np.array(basis)
+
+"""
+    Returns l_1 and l_2 corresponding to a given index
+"""
+def get_eff_rotor_index(l1, l2, l_max):
+    dim = 2 * l_max + 1
+    index = (l1 + l_max) * dim + (l2 + l_max)
+
+    return index
 
 
 """
@@ -28,7 +39,7 @@ def get_eff_H_rotor_mel(U, h, J_eff, l1, l2, l1_prime, l2_prime):
     Returns effective rotor Hamiltonian matrix in the |l1,l2> basis
 """
 def get_eff_H_rotor(U, h, J_eff, l_max):
-    rotor_basis = get_rotor_basis(l_max)
+    rotor_basis = get_eff_rotor_basis(l_max)
     dim_basis = len(rotor_basis)
 
     H_rotor = np.zeros((dim_basis, dim_basis))
@@ -46,7 +57,43 @@ def get_eff_H_rotor(U, h, J_eff, l_max):
 """
     Computes t_eff
 """
-def get_t_eff(t, rotor_energies, rotor_eigvecs):
+def get_t_eff(t, rotor_energies, rotor_states, beta, l_max):
+    rotor_dim = len(rotor_energies)
+    basis = get_eff_rotor_basis(l_max)
+
     # Shift rotor energies to avoid divergences, the formula's division cancels out the shift
-    rotor_energies = rotor_energies - np.min(rotor_energies)
-    rotor_partition = partition(rotor_energies)
+    rotor_energies = rotor_energies - rotor_energies[0]
+
+    num_sum = 0.0
+    den_sum = 0.0
+
+    for n in range(rotor_dim):
+        rotor_energy = rotor_energies[n]
+        boltzmann = np.exp(-beta * rotor_energy)
+        state = rotor_states[n]
+
+        for i in range(rotor_dim):
+            rotor_factor = 0.0
+            l1, l2 = basis[i]
+
+            # Handle l1, l2 calls greater than l_max
+            # May give more specific conditions later depending on accuracy
+            if (l1 == -l_max) or (l2 == -l_max) or (l1 == l_max) or (l2 == l_max):
+                rotor_factor = np.abs(state[i])**2
+                
+            else:
+                shift_index_1 = get_eff_rotor_index(l1+1,l2-1)
+                shift_index_2 = get_eff_rotor_index(l1-1,l2+1)
+
+                rotor_factor = np.conj(state[i])*(state[shift_index_1] + state[shift_index_2])/2
+            
+            num_sum += boltzmann * rotor_factor
+    
+    t_eff = num_sum / den_sum
+
+    return t_eff
+
+
+if __name__ == '__main__':
+    basis = get_eff_rotor_basis(2)
+    print(basis)
