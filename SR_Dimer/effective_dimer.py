@@ -5,6 +5,15 @@ import itertools
 from utility.helpers import delta, fermi_dirac, partition
 
 """
+    Code for the effective dimer
+    Spinon and rotor Hamiltonians are coupled by effective spinon and rotor tunneling amplitudes
+    No mean-field approximation
+    Rotors at seperate sites are coupled, leading to an infinity x infinity dimensional rotor Fock space
+    Computation is untenable for many-sites, but doable for dimer
+    Good problem to bridge the gap between the exact and mean-field problems
+"""
+
+"""
     Returns |l_1 l_2> basis elements
 """
 def get_eff_rotor_basis(l_max):
@@ -24,7 +33,6 @@ def get_eff_rotor_index(l1, l2, l_max):
 
     return index
 
-
 """
     Returns effective rotor matrix elements <l1,l2|H_{theta}|l1_prime, l2_prime>
 """
@@ -33,7 +41,6 @@ def get_eff_H_rotor_mel(U, h, J_eff, l1, l2, l1_prime, l2_prime):
     off_diag = -J_eff * (delta(l1, l1_prime + 1) * delta(l2, l2_prime - 1) + delta(l1, l1_prime - 1) * delta(l2, l2_prime + 1))
     
     return diag + off_diag
-
 
 """
     Returns effective rotor Hamiltonian matrix in the |l1,l2> basis
@@ -57,42 +64,47 @@ def get_eff_H_rotor(U, h, J_eff, l_max):
 """
     Computes t_eff
 """
-def get_t_eff(t, rotor_energies, rotor_states, beta, l_max):
-    rotor_dim = len(rotor_energies)
+def get_t_eff(U, t, h, J_eff, beta, l_max):
+    rotor_dim = (2 * l_max + 1)**2
     basis = get_eff_rotor_basis(l_max)
 
-    # Shift rotor energies to avoid divergences, the formula's division cancels out the shift
+    H_rotor = get_eff_H_rotor(U, h, J_eff, l_max)
+    rotor_energies, rotor_states = np.linalg.eigh(H_rotor)
+
+    # Shift rotor energies to avoid large exponentials
+    # Division in t_eff's formula cancels the shift
     rotor_energies = rotor_energies - rotor_energies[0]
 
-    num_sum = 0.0
-    den_sum = 0.0
+    num_sum, den_sum = 0.0, 0.0
 
-    for n in range(rotor_dim):
-        rotor_energy = rotor_energies[n]
+    for i in range(rotor_dim):
+        rotor_energy = rotor_energies[i]
         boltzmann = np.exp(-beta * rotor_energy)
-        state = rotor_states[n]
+        state = rotor_states[i]
+        
+        rotor_sum = 0.0
 
-        for i in range(rotor_dim):
-            rotor_factor = 0.0
-            l1, l2 = basis[i]
+        for j in range(rotor_dim):
+            l1, l2 = basis[j]
 
             # Handle l1, l2 calls greater than l_max
             # May give more specific conditions later depending on accuracy
             if (l1 == -l_max) or (l2 == -l_max) or (l1 == l_max) or (l2 == l_max):
-                rotor_factor = np.abs(state[i])**2
-                
+                rotor_sum += np.abs(state[j])**2
             else:
-                shift_index_1 = get_eff_rotor_index(l1+1,l2-1)
-                shift_index_2 = get_eff_rotor_index(l1-1,l2+1)
+                shift_index_1 = get_eff_rotor_index(l1 + 1,l2 - 1, l_max)
+                shift_index_2 = get_eff_rotor_index(l1 - 1,l2 + 1, l_max)
 
-                rotor_factor = np.conj(state[i])*(state[shift_index_1] + state[shift_index_2])/2
+                rotor_sum += np.conj(state[j])*(state[shift_index_1] + state[shift_index_2])/2
             
-            num_sum += boltzmann * rotor_factor
+        num_sum += boltzmann * rotor_sum
+        den_sum += boltzmann
     
-    t_eff = num_sum / den_sum
+    t_eff = t * (num_sum / den_sum)
 
     return t_eff
-
+        
+            
 """
     Returns spinon basis of the form |0000>, |1000>, |1100>,...
 """
@@ -120,7 +132,7 @@ def get_spinon_from_gamma():
     return 
 
 """
-    Return single-particle energies
+    Return gamma-particle energies
 """
 def get_E_plus(epsilon, h, t_eff):
     E_plus = epsilon - h - t_eff
@@ -129,6 +141,7 @@ def get_E_plus(epsilon, h, t_eff):
 def get_E_minus(epsilon, h, t_eff):
     E_minus = epsilon - h + t_eff
     return E_minus 
+
 
 """
     Returns J_eff by taking a thermal average of the hopping operator over the spinon Hamiltonian
@@ -141,12 +154,127 @@ def get_J_eff(epsilon, h, t, t_eff, beta):
 
     return J_eff
 
-def get_nf(epsilon, h, t, t_eff, beta):
+"""
+    Returns the fermion occupation at a given site
+    Since the system is homogenous, <n_i>_f is the same at both sites
+"""
+def get_nf(epsilon, h, t_eff, beta):
     E_plus, E_minus = get_E_plus(epsilon, h, t_eff), get_E_minus(epsilon, h, t_eff)
     nf = fermi_dirac(E_plus, beta) + fermi_dirac(E_minus, beta)
     
     return nf
 
+"""
+    Returns the thermal average of L over the rotor Hamiltonian
+"""
+def get_L(U, h, J_eff, beta, l_max, SITE=1):
+    rotor_dim = (2 * l_max + 1)**2
+    basis = get_eff_rotor_basis(l_max)
+
+    H_rotor = get_eff_H_rotor(U, h, J_eff, l_max)
+    rotor_energies, rotor_states = np.linalg.eigh(H_rotor)
+
+    rotor_energies = rotor_energies - rotor_energies[0]
+
+    num_sum, den_sum = 0.0, 0.0
+
+    for i in range(rotor_dim):
+
+        rotor_energy = rotor_energies[i]
+        boltzmann = np.exp(-beta * rotor_energy)
+        state = rotor_states[i]
+
+        rotor_sum = 0.0
+
+        for j in range(rotor_dim):
+            l1, l2 = basis[j]
+
+            if SITE == 0: 
+                rotor_sum += l1 * np.abs(state[i])**2
+            elif SITE == 1:
+                rotor_sum += l2 * np.abs(state[i])**2
+            else:
+                raise ValueError('SITE must be 1 or 2')
+            
+        num_sum += boltzmann * rotor_sum
+        den_sum += boltzmann 
+
+    L = num_sum / den_sum
+
+    return L
+
+
+"""
+    Return derivative of nf with respect to h
+"""
+def get_d_nf(epsilon, h, dh, t_eff, beta):
+    nf_plus = get_nf(epsilon, h + dh/2, t_eff, beta)
+    nf_minus = get_nf(epsilon, h - dh/2, t_eff, beta)
+
+    d_nf = (nf_plus - nf_minus) / dh
+
+    return d_nf
+
+
+"""
+    Return derivative of L with respect to h
+"""
+def get_d_L(U, h, dh, J_eff, beta, l_max):
+    L_plus = get_L(U, h + dh/2, J_eff, beta, l_max)
+    L_minus = get_L(U, h - dh/2, J_eff, beta, l_max)
+
+    d_L = (L_plus - L_minus) / dh
+
+    return d_L
+
+
+"""
+    Iterate over parameters until convergence
+    Code isn't pretty due to having to redundantly define parameters at some point, but it gets the job done
+"""
+def update_params(epsilon, U, t, h_guess, J_eff_guess, beta, l_max):
+    dh = 1e-4
+    did_converge = False
+
+    # Initial values to guess for iteration
+    # Assume J_eff ~ t i.e. 
+    h_update = h_guess
+    t_eff_update = get_t_eff(U, t, h_update, J_eff_guess, beta, l_max)
+    J_eff_update = get_J_eff(epsilon, h_update, t, t_eff_update, beta)
+
+    while not did_converge:
+        h = h_update
+        t_eff = t_eff_update 
+        J_eff = J_eff_update
+
+        nf = get_nf(epsilon, h, t_eff, beta)
+        L = get_L(U, h, J_eff, beta, l_max)
+
+        d_nf = get_d_nf(epsilon, h, dh, t_eff, beta)
+        d_L = get_d_L(U, h, dh, J_eff, beta, l_max)
+
+        # Newton's method
+        h_update = h - (nf - L - 1)/(d_nf - d_L)
+
+        # Get updated params
+        t_eff_update = get_t_eff(U, t, h_update, J_eff, beta, l_max)
+        J_eff_update = get_J_eff(epsilon, h_update, t, t_eff_update, beta)
+
+        if (np.abs(h_update - h) < 1e-4) and (np.abs(t_eff_update - t_eff) < 1e-4) and (np.abs(J_eff_update - J_eff) < 1e-4):
+            did_converge = True
+
+    return h_update, t_eff_update, J_eff_update
+
+
 if __name__ == '__main__':
-    basis = get_eff_rotor_basis(2)
-    print(basis)
+    epsilon = 0.0
+    t = 1.0
+    U = 0.0
+    beta = 20
+    l_max = 5
+
+    h, t_eff, J_eff = update_params(epsilon, U, t, 0.1, 2*t, beta, l_max)
+
+    print(f'h: {h}')
+    print(f't_eff: {t_eff}')
+    print(f'J_eff: {J_eff}')
