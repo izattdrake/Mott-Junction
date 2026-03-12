@@ -71,7 +71,6 @@ def get_t_eff(U, t, h, J_eff, beta, l_max):
 
     H_rotor = get_eff_H_rotor(U, h, J_eff, l_max)
     rotor_energies, rotor_states = np.linalg.eigh(H_rotor)
-
     # Shift rotor energies to avoid large exponentials
     # Division in t_eff's formula cancels the shift
     rotor_energies = rotor_energies - rotor_energies[0]
@@ -81,7 +80,7 @@ def get_t_eff(U, t, h, J_eff, beta, l_max):
     for i in range(rotor_dim):
         rotor_energy = rotor_energies[i]
         boltzmann = np.exp(-beta * rotor_energy)
-        state = rotor_states[i]
+        state = rotor_states[:,i]
         
         rotor_sum = 0.0
 
@@ -170,7 +169,7 @@ def get_L(U, h, J_eff, beta, l_max, SITE=1):
 
         rotor_energy = rotor_energies[i]
         boltzmann = np.exp(-beta * rotor_energy)
-        state = rotor_states[i]
+        state = rotor_states[:,i]
 
         rotor_sum = 0.0
 
@@ -259,8 +258,8 @@ def update_params(epsilon, U, t, h_guess, J_eff_guess, beta, l_max):
 if __name__ == '__main__':
     epsilon = 0.5
     t = 1.0
-    U = 8.0
-    beta = 1
+    U = 0.05
+    beta = 25
     l_max = 5
 
     # particle number in (0,2)
