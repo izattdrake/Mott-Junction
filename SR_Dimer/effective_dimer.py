@@ -104,19 +104,6 @@ def get_t_eff(U, t, h, J_eff, beta, l_max):
 
     return t_eff
         
-            
-"""
-    Returns spinon basis of the form |0000>, |1000>, |1100>,...
-"""
-def get_spinon_basis():
-    occ_vals = [0, 1]
-    
-    basis = list(itertools.product(
-        occ_vals, occ_vals, occ_vals, occ_vals
-    ))
-    
-    return np.array(basis)
-
 """
     Returns the index corresponding to a 
 """
@@ -263,18 +250,23 @@ def update_params(epsilon, U, t, h_guess, J_eff_guess, beta, l_max):
         if (np.abs(h_update - h) < 1e-4) and (np.abs(t_eff_update - t_eff) < 1e-4) and (np.abs(J_eff_update - J_eff) < 1e-4):
             did_converge = True
 
-    return h_update, t_eff_update, J_eff_update
+    return h_update, t_eff_update, J_eff_update, nf
 
 
 if __name__ == '__main__':
-    epsilon = 0.0
+    epsilon = 0.5
     t = 1.0
-    U = 0.0
-    beta = 20
+    U = 8.0
+    beta = 1
     l_max = 5
 
-    h, t_eff, J_eff = update_params(epsilon, U, t, 0.1, 2*t, beta, l_max)
+    h, t_eff, J_eff, nf = update_params(epsilon, U, t, 0.0, t, beta, l_max)
 
     print(f'h: {h}')
     print(f't_eff: {t_eff}')
     print(f'J_eff: {J_eff}')
+    print(f'nf: {nf}')
+
+    H_rotor = get_eff_H_rotor(U, h, J_eff, l_max)
+    energies, states = np.linalg.eigh(H_rotor)
+

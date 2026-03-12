@@ -1,8 +1,6 @@
 import numpy as np
-import matplotlib.pyplot as plt
-import itertools
 
-from utility.helpers import delta
+from utility.helpers import delta, get_fermion_basis
 
 L_CUT = 2
 ROTOR_DIM = (2 * L_CUT + 1)
@@ -11,22 +9,10 @@ SPINON_DIM = 16
 DIM = SPINON_DIM * ROTOR_DIM * ROTOR_DIM
 
 """
-    Returns spinon-rotor basis kets, organized by their 6 quantum numbers
-"""
-def get_mixed_basis():
-    ell_vals = range(-L_CUT, L_CUT + 1)
-    basis = list(itertools.product(
-        [0,1], [0,1],
-        [0,1], [0,1],
-        ell_vals, ell_vals
-    ))
-    return basis
-
-"""
     Returns physical spinon-rotor basis kets
 """
 def get_phys_basis():
-    basis = get_mixed_basis()
+    basis = get_fermion_basis()
     phys_basis = []
 
     for q_nums in basis:
@@ -69,7 +55,7 @@ def get_index(q_nums):
     Physical states must have zero eigenvalues on both dimer sites
 """
 def get_constraint_operator(site):
-    mixed_basis = get_mixed_basis()
+    mixed_basis = get_fermion_basis()
     operator = np.zeros((DIM, DIM))
 
     if (not site == 0) and (not site == 1):

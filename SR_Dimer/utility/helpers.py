@@ -1,7 +1,22 @@
 import numpy as np
+import itertools
 
+"""
+    Constants used for computation
+"""
 KB_SI = 1.380649 * 10**(-23)
 KB_EV = 8.617333262 * 10**(-5)
+
+
+"""
+    Returns spinon basis of the form |0000>, |1000>, |1100>,...
+"""
+def get_fermion_basis():    
+    basis = list(itertools.product(
+        [0,1], [0,1], [0,1], [0,1]
+    ))
+    
+    return np.array(basis)
 
 """
     Kronecker Delta function
