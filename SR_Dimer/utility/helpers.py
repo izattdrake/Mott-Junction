@@ -18,6 +18,7 @@ def get_fermion_basis():
     
     return np.array(basis)
 
+
 """
     Kronecker Delta function
 """

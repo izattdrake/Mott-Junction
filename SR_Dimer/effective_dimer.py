@@ -1,4 +1,5 @@
 import numpy as np
+import scipy
 import matplotlib.pyplot as plt
 import itertools 
 
@@ -145,9 +146,9 @@ def get_J_eff(epsilon, h, t, t_eff, beta):
     Returns the fermion occupation at a given site
     Since the system is homogenous, <n_i>_f is the same at both sites
 """
-def get_nf(epsilon, h, t_eff, beta):
+def get_nf(epsilon, h, t_eff, beta, mu=0):
     E_plus, E_minus = get_E_plus(epsilon, h, t_eff), get_E_minus(epsilon, h, t_eff)
-    nf = fermi_dirac(E_plus, beta) + fermi_dirac(E_minus, beta)
+    nf = fermi_dirac(E_plus, beta, mu) + fermi_dirac(E_minus, beta, mu)
     
     return nf
 
@@ -237,6 +238,8 @@ def update_params(epsilon, U, t, h_guess, J_eff_guess, beta, l_max):
         nf = get_nf(epsilon, h, t_eff, beta)
         L = get_L(U, h, J_eff, beta, l_max)
 
+        print(f'nf: {nf}')
+
         d_nf = get_d_nf(epsilon, h, dh, t_eff, beta)
         d_L = get_d_L(U, h, dh, J_eff, beta, l_max)
 
@@ -260,6 +263,8 @@ if __name__ == '__main__':
     beta = 1
     l_max = 5
 
+    # particle number in (0,2)
+    particle_num = 1.0
     h, t_eff, J_eff, nf = update_params(epsilon, U, t, 0.0, t, beta, l_max)
 
     print(f'h: {h}')
