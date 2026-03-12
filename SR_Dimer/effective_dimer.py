@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import itertools 
 
-from utility.helpers import delta, partition
+from utility.helpers import delta, fermi_dirac, partition
 
 """
     Returns |l_1 l_2> basis elements
@@ -93,6 +93,59 @@ def get_t_eff(t, rotor_energies, rotor_states, beta, l_max):
 
     return t_eff
 
+"""
+    Returns spinon basis of the form |0000>, |1000>, |1100>,...
+"""
+def get_spinon_basis():
+    occ_vals = [0, 1]
+    
+    basis = list(itertools.product(
+        occ_vals, occ_vals, occ_vals, occ_vals
+    ))
+    
+    return np.array(basis)
+
+"""
+    Returns the index corresponding to a 
+"""
+def get_spinon_index(n1_up, n1_down, n2_up, n2_down):
+    index = 8 * n1_up + 4 * n1_down + 2 * n2_up + n2_down
+    return index
+
+"""
+    Returns the superposition of spinon states coming from gamma excitations, the diagoanlized Hamiltonian states
+    I want to use this to check the Fermi-Dirac vs 
+"""
+def get_spinon_from_gamma():
+    return 
+
+"""
+    Return single-particle energies
+"""
+def get_E_plus(epsilon, h, t_eff):
+    E_plus = epsilon - h - t_eff
+    return E_plus
+
+def get_E_minus(epsilon, h, t_eff):
+    E_minus = epsilon - h + t_eff
+    return E_minus 
+
+"""
+    Returns J_eff by taking a thermal average of the hopping operator over the spinon Hamiltonian
+    Traces are evaluated by going to the eigenstate basis
+    Can compare with the approach taken in the MF picture where diagonalized states were averaged with the FD distribution
+"""
+def get_J_eff(epsilon, h, t, t_eff, beta):
+    E_plus, E_minus = get_E_plus(epsilon, h, t_eff), get_E_minus(epsilon, h, t_eff)
+    J_eff = t * (fermi_dirac(E_plus, beta) - fermi_dirac(E_minus, beta))
+
+    return J_eff
+
+def get_nf(epsilon, h, t, t_eff, beta):
+    E_plus, E_minus = get_E_plus(epsilon, h, t_eff), get_E_minus(epsilon, h, t_eff)
+    nf = fermi_dirac(E_plus, beta) + fermi_dirac(E_minus, beta)
+    
+    return nf
 
 if __name__ == '__main__':
     basis = get_eff_rotor_basis(2)
