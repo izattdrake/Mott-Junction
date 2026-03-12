@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from exact_dimer import get_phys_basis, get_def_particle_basis, get_exact_H
+from exact_dimer import get_phys_basis, get_def_particle_basis, get_H
 from mf_dimer_numerical import *
 from utility.helpers import *
 
@@ -63,7 +63,7 @@ def plot_def_number_spectrum(epsilon, t, J_vals, PLOT_P0=False, PLOT_P1=False, P
     for i in range(len(energies)):
         basis = bases[i]
         for J in J_vals:
-            H = get_exact_H(epsilon, J, t, basis)
+            H = get_H(epsilon, J, t, basis)
 
             eigenvals, _ = np.linalg.eigh(H)
 
