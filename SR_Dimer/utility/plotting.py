@@ -104,7 +104,7 @@ def plot_spectrum(energies, J_vals):
     Plots the dimer spectrum across entire Fock space
     Allows for selecting which particle number subspaces to plot 
 """
-def plot_def_number_spectrum(epsilon, t, J_vals, PLOT_P0=False, PLOT_P1=False, PLOT_P2=False, PLOT_P3=False, PLOT_P4=False):
+def plot_def_number_spectrum(epsilon, t, J_vals, PLOT_P0=False, PLOT_P1=False, PLOT_P2=False, PLOT_P3=False, PLOT_P4=False, PLOT_EFF=False, EFF_ENERGIES=None):
 
     bases = [get_def_particle_basis(0), get_def_particle_basis(1), get_def_particle_basis(2), get_def_particle_basis(3), get_def_particle_basis(4)]
     energies = [[], [], [], [], []]
@@ -120,12 +120,13 @@ def plot_def_number_spectrum(epsilon, t, J_vals, PLOT_P0=False, PLOT_P1=False, P
 
     plt.figure()
 
-    shapes = ['D', 'o', 's', '^', 'v']
-    colors = ['blue', 'purple', 'green', 'red', 'gold']
-    labels = ['N=0', 'N=1', 'N=2', 'N=3', 'N=4']
+    shapes = ['D', 'o', 's', '^', 'v', 'p']
+    colors = ['blue', 'purple', 'green', 'red', 'gold', 'black']
+    labels = ['N=0', 'N=1', 'N=2', 'N=3', 'N=4', 'EFF']
 
     datasets = []
-
+    print(f'energies[0]: {energies[0]}')
+    print(f'length: {len(energies[0])}')
     if PLOT_P0:
         datasets.append((energies[0], shapes[0], colors[0], labels[0]))
     if PLOT_P1:
@@ -136,14 +137,14 @@ def plot_def_number_spectrum(epsilon, t, J_vals, PLOT_P0=False, PLOT_P1=False, P
         datasets.append((energies[3], shapes[3], colors[3], labels[3]))
     if PLOT_P4:
         datasets.append((energies[4], shapes[4], colors[4], labels[4]))
+    if PLOT_EFF:
+        datasets.append((EFF_ENERGIES, shapes[5], colors[5], labels[5]))
 
     for E_data, marker, color, label in datasets:
-        # Flatten all points for this dataset
         x, y = [], []
         for J, E_list in zip(J_vals, E_data):
             x.extend([J]*len(E_list))
             y.extend(E_list)
-        # Plot all points in one call and assign label for legend
         plt.scatter(x, y, marker=marker, edgecolors=color, facecolors='white', linewidths=0.8, label=label, s=60)
 
     plt.xlabel('U/t')

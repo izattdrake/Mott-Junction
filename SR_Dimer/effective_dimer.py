@@ -5,8 +5,7 @@ import itertools
 import sys
 
 import utility.helpers as helpers
-from utility.plotting import plot_rotor_pair_weight
-
+from utility.plotting import plot_rotor_pair_weight, plot_def_number_spectrum
 """
     Code for the effective dimer
     Spinon and rotor Hamiltonians are coupled by effective spinon and rotor tunneling amplitudes
@@ -320,26 +319,33 @@ def rotor_spectrum(omega, energies, states, beta, l_max):
     return spectrum
 
 if __name__ == '__main__':
-    l_max = 5
+    l_max = 8
     rotor_dim = (2*l_max + 1)**2
 
     epsilon = 0.5
     t = 1.0
-    U = 5.0
-    beta = 10    # particle number in (0,2)
+    U = 8.0
+    beta = 50    # particle number in (0,2)
     particle_num = 1.0
-    h, t_eff, J_eff, nf = update_params(epsilon, U, 0.8 * t, 0.3, 0.8 * t, beta, l_max)
 
-    print(f'h: {h}')
-    print(f't_eff: {t_eff}')
-    print(f'J_eff: {J_eff}')
-    print(f'nf: {nf}')
+    J_vals = [3,4,5,6,7,8]
+    spinon_energies = []
+    for J in J_vals:
+        h, t_eff, J_eff, nf = update_params(epsilon, U, 0.8 * t, 0.4, 0.8 * t, beta, l_max)
 
-    H_rotor = get_eff_H_rotor(U, h, J_eff, l_max)
-    energies, states = np.linalg.eigh(H_rotor)
+        """
+            print(f'h: {h}')
+            print(f't_eff: {t_eff}')
+            print(f'J_eff: {J_eff}')
+            print(f'nf: {nf}')
+        """
+        H_rotor = get_eff_H_rotor(U, h, J_eff, l_max)
+        energies, states = np.linalg.eigh(H_rotor)
 
-    rotor_spectrum(1, energies, states, beta, l_max)
-        
-        
+        E_plus = get_E_plus(epsilon, h, t_eff)
+        E_minus = get_E_minus(epsilon, h, t_eff)
+
+        spinon_energies.append([E_plus, E_minus])
 
 
+    plot_def_number_spectrum(epsilon, t, J_vals, PLOT_P2=True, PLOT_EFF=True, EFF_ENERGIES=spinon_energies)

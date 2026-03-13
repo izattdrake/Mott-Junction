@@ -15,14 +15,24 @@ KB_EV = 8.617333262 * 1e-5
 """
     Returns spinon basis of the form |0000>, |1000>, |1100>,...
 """
-def get_fermion_basis():    
+def get_spinon_basis():    
     basis = list(itertools.product(
         [0,1], [0,1], [0,1], [0,1]
     ))
     
     return np.array(basis)
 
+"""
+    Returns mixed basis 
+"""
+def get_mixed_basis():
+    l_vals = [-2,-1,0,1,2]
+    basis = list(itertools.product(
+        [0,1], [0,1], [0,1], [0,1],
+        l_vals, l_vals
+    ))
 
+    return basis
 """
     Kronecker Delta function
 """

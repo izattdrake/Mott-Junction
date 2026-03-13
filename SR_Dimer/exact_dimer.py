@@ -1,6 +1,6 @@
 import numpy as np
 
-from utility.helpers import k_delta, get_fermion_basis
+from utility.helpers import k_delta, get_mixed_basis
 
 L_CUT = 2
 ROTOR_DIM = (2 * L_CUT + 1)
@@ -12,7 +12,7 @@ DIM = SPINON_DIM * ROTOR_DIM * ROTOR_DIM
     Returns physical spinon-rotor basis kets
 """
 def get_phys_basis():
-    basis = get_fermion_basis()
+    basis = get_mixed_basis()
     phys_basis = []
 
     for q_nums in basis:
@@ -55,7 +55,7 @@ def get_index(q_nums):
     Physical states must have zero eigenvalues on both dimer sites
 """
 def get_constraint_operator(site):
-    mixed_basis = get_fermion_basis()
+    mixed_basis = get_spinon_basis()
     operator = np.zeros((DIM, DIM))
 
     if (not site == 0) and (not site == 1):
