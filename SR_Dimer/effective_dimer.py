@@ -2,8 +2,10 @@ import numpy as np
 import scipy
 import matplotlib.pyplot as plt
 import itertools 
+import sys
 
-from utility.helpers import delta, fermi_dirac, partition
+import utility.helpers as helpers
+from utility.plotting import plot_rotor_pair_weight
 
 """
     Code for the effective dimer
@@ -29,8 +31,7 @@ def get_eff_rotor_basis(l_max):
     Returns l_1 and l_2 corresponding to a given index
 """
 def get_eff_rotor_index(l1, l2, l_max):
-    dim = 2 * l_max + 1
-    index = (l1 + l_max) * dim + (l2 + l_max)
+    index = (l1 + l_max) * (2 * l_max + 1) + (l2 + l_max)
 
     return index
 
@@ -38,8 +39,8 @@ def get_eff_rotor_index(l1, l2, l_max):
     Returns effective rotor matrix elements <l1,l2|H_{theta}|l1_prime, l2_prime>
 """
 def get_eff_H_rotor_mel(U, h, J_eff, l1, l2, l1_prime, l2_prime):
-    diag = ((U / 2) * (l1**2 + l2**2) + h*(l1 + l2)) * delta(l1,l1_prime) * delta(l2,l2_prime)
-    off_diag = -J_eff * (delta(l1, l1_prime + 1) * delta(l2, l2_prime - 1) + delta(l1, l1_prime - 1) * delta(l2, l2_prime + 1))
+    diag = ((U / 2) * (l1**2 + l2**2) + h*(l1 + l2)) * helpers.delta(l1,l1_prime) * helpers.delta(l2,l2_prime)
+    off_diag = -J_eff * (helpers.delta(l1, l1_prime + 1) * helpers.delta(l2, l2_prime - 1) + helpers.delta(l1, l1_prime - 1) * helpers.delta(l2, l2_prime + 1))
     
     return diag + off_diag
 
@@ -67,7 +68,9 @@ def get_eff_H_rotor(U, h, J_eff, l_max):
 """
 def get_t_eff(U, t, h, J_eff, beta, l_max):
     rotor_dim = (2 * l_max + 1)**2
-    basis = get_eff_rotor_basis(l_max)
+    rotor_basis = get_eff_rotor_basis(l_max)
+
+    basis_index = {tuple(state): i for i, state in enumerate(rotor_basis)}
 
     H_rotor = get_eff_H_rotor(U, h, J_eff, l_max)
     rotor_energies, rotor_states = np.linalg.eigh(H_rotor)
@@ -85,23 +88,32 @@ def get_t_eff(U, t, h, J_eff, beta, l_max):
         rotor_sum = 0.0
 
         for j in range(rotor_dim):
-            l1, l2 = basis[j]
+            l1, l2 = rotor_basis[j]
 
             # Handle l1, l2 calls greater than l_max
             # May give more specific conditions later depending on accuracy
-            if (l1 == -l_max) or (l2 == -l_max) or (l1 == l_max) or (l2 == l_max):
-                rotor_sum += np.abs(state[j])**2
-            else:
-                shift_index_1 = get_eff_rotor_index(l1 + 1,l2 - 1, l_max)
-                shift_index_2 = get_eff_rotor_index(l1 - 1,l2 + 1, l_max)
+            if (l1 == -l_max or l1 == l_max) and (l2 == -l_max or l2 == l_max):
+                rotor_sum += 0
 
-                rotor_sum += np.conj(state[j])*(state[shift_index_1] + state[shift_index_2])/2
+            elif (l1 == -l_max) and (not l2 == -l_max and not l2 == l_max):
+                rotor_sum += np.conj(state[basis_index[l1,l2]]) * state[basis_index[l1+1,l2-1]]/2
+
+            elif (l1 == l_max) and (not l2 == -l_max and not l2 == l_max):
+                rotor_sum += np.conj(state[basis_index[l1,l2]]) * state[basis_index[l1-1, l2+1]]/2
+
+            elif (l2 == -l_max) and (not l1 == -l_max and not l1 == l_max):
+                rotor_sum += np.conj(state[basis_index[l1,l2]]) * state[basis_index[l1-1,l2+1]] / 2
+
+            elif (l2 == l_max) and (not l1 == -l_max and not l1 == l_max):
+                rotor_sum += np.conj(state[basis_index[l1,l2]]) * state[basis_index[l1+1,l2-1]] / 2
+
+            elif (not l1 == -l_max and not l1 == l_max) and (not l2 == -l_max and not l2 == l_max):
+                rotor_sum += np.conj(state[basis_index[l1,l2]]) * (state[basis_index[l1+1,l2-1]] + state[basis_index[l1-1,l2+1]])/2
             
         num_sum += boltzmann * rotor_sum
         den_sum += boltzmann
     
     t_eff = t * (num_sum / den_sum)
-
     return t_eff
         
 """
@@ -137,7 +149,7 @@ def get_E_minus(epsilon, h, t_eff):
 """
 def get_J_eff(epsilon, h, t, t_eff, beta):
     E_plus, E_minus = get_E_plus(epsilon, h, t_eff), get_E_minus(epsilon, h, t_eff)
-    J_eff = t * (fermi_dirac(E_plus, beta) - fermi_dirac(E_minus, beta))
+    J_eff = t * (helpers.fermi_dirac(E_plus, beta) - helpers.fermi_dirac(E_minus, beta))
 
     return J_eff
 
@@ -145,9 +157,9 @@ def get_J_eff(epsilon, h, t, t_eff, beta):
     Returns the fermion occupation at a given site
     Since the system is homogenous, <n_i>_f is the same at both sites
 """
-def get_nf(epsilon, h, t_eff, beta, mu=0):
+def get_nf(epsilon, h, t_eff, beta, mu=0.0):
     E_plus, E_minus = get_E_plus(epsilon, h, t_eff), get_E_minus(epsilon, h, t_eff)
-    nf = fermi_dirac(E_plus, beta, mu) + fermi_dirac(E_minus, beta, mu)
+    nf = helpers.fermi_dirac(E_plus, beta, mu) + helpers.fermi_dirac(E_minus, beta, mu)
     
     return nf
 
@@ -177,9 +189,9 @@ def get_L(U, h, J_eff, beta, l_max, SITE=1):
             l1, l2 = basis[j]
 
             if SITE == 0: 
-                rotor_sum += l1 * np.abs(state[i])**2
+                rotor_sum += l1 * np.abs(state[j])**2
             elif SITE == 1:
-                rotor_sum += l2 * np.abs(state[i])**2
+                rotor_sum += l2 * np.abs(state[j])**2
             else:
                 raise ValueError('SITE must be 1 or 2')
             
@@ -237,8 +249,6 @@ def update_params(epsilon, U, t, h_guess, J_eff_guess, beta, l_max):
         nf = get_nf(epsilon, h, t_eff, beta)
         L = get_L(U, h, J_eff, beta, l_max)
 
-        print(f'nf: {nf}')
-
         d_nf = get_d_nf(epsilon, h, dh, t_eff, beta)
         d_L = get_d_L(U, h, dh, J_eff, beta, l_max)
 
@@ -254,17 +264,24 @@ def update_params(epsilon, U, t, h_guess, J_eff_guess, beta, l_max):
 
     return h_update, t_eff_update, J_eff_update, nf
 
+def spectral_spinon():
+    return 
+
+def spectral_rotor():
+    return 
 
 if __name__ == '__main__':
+    l_max = 3
+    rotor_dim = (2*l_max + 1)**2
+
     epsilon = 0.5
     t = 1.0
-    U = 0.05
-    beta = 25
-    l_max = 5
-
+    U = 5.0
+    beta = 10
+    
     # particle number in (0,2)
     particle_num = 1.0
-    h, t_eff, J_eff, nf = update_params(epsilon, U, t, 0.0, t, beta, l_max)
+    h, t_eff, J_eff, nf = update_params(epsilon, U, 0.8*t, 0.3, 0.8*t, beta, l_max)
 
     print(f'h: {h}')
     print(f't_eff: {t_eff}')
@@ -273,4 +290,9 @@ if __name__ == '__main__':
 
     H_rotor = get_eff_H_rotor(U, h, J_eff, l_max)
     energies, states = np.linalg.eigh(H_rotor)
+    gs = states[:,0]
+    plot_rotor_pair_weight(gs,l_max)
+        
+        
+
 

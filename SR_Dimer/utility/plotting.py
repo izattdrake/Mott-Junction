@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
+from mpl_toolkits.mplot3d import Axes3D
 from exact_dimer import get_phys_basis, get_def_particle_basis, get_H
 from mf_dimer_numerical import *
 from utility.helpers import *
@@ -16,17 +17,65 @@ Logic behind exact and MF theories in the other files
     Used to study the weights around physical values of |l>
     and the dropoff towards l_max 
 """
-def plot_rotor_gs_weight(rotor_gs, l_max):
+def plot_rotor_weight(rotor_state, l_max):
     # Construct l values
     l_vals = np.arange(-l_max, l_max + 1)
 
     # Plot
     plt.figure()
-    plt.plot(l_vals, rotor_gs, marker='o')
+    plt.plot(l_vals, rotor_state, marker='o')
     plt.xlabel("l")
     plt.ylabel("Weight")
     plt.title("Rotor Ground State Weights: $\ell_{max}=$" + f'{l_max}')
     plt.grid(True)
+    plt.show()
+
+def plot_rotor_pair_weight(rotor_vector, l_max):
+    """
+    Plot rotor vector coefficients in the |ℓ₁ℓ₂⟩ two-rotor basis.
+
+    Parameters
+    ----------
+    rotor_vector : 1D array of length (2*l_max+1)**2
+        The coefficients ⟨ℓ₁ℓ₂|ψ⟩, indexed by
+        index = (ℓ₁ + l_max) * (2*l_max + 1) + (ℓ₂ + l_max).
+    l_max : int
+        Maximum angular momentum quantum number.
+    """
+    l_vals = np.arange(-l_max, l_max + 1)
+    n = 2 * l_max + 1
+
+    fig = plt.figure(figsize=(10, 7))
+    ax = fig.add_subplot(111, projection='3d')
+
+    dx = dy = 0.6
+    x, y, dz = [], [], []
+
+    for i, l1 in enumerate(l_vals):
+        for j, l2 in enumerate(l_vals):
+            idx = i * n + j
+            x.append(l1 - dx / 2)
+            y.append(l2 - dy / 2)
+            dz.append(rotor_vector[idx])
+
+    x, y, dz = np.array(x), np.array(y), np.array(dz)
+    z = np.zeros_like(dz)
+
+    colors = plt.cm.viridis((dz - dz.min()) / (dz.max() - dz.min() + 1e-12))
+
+    ax.bar3d(x, y, z, dx, dy, dz, color=colors, shade=True, alpha=0.85)
+
+    ax.set_xlabel(r'$\ell_1$', fontsize=13)
+    ax.set_ylabel(r'$\ell_2$', fontsize=13)
+    ax.set_zlabel('Weight', fontsize=13)
+    ax.set_title(
+        r'Rotor Weights: $|\ell_1 \ell_2\rangle$ basis, $\ell_{\max}=$' + f'{l_max}',
+        fontsize=13
+    )
+    ax.set_xticks(l_vals)
+    ax.set_yticks(l_vals)
+
+    plt.tight_layout()
     plt.show()
 
 """
