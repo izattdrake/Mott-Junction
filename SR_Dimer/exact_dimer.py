@@ -1,6 +1,6 @@
 import numpy as np
 
-from utility.helpers import delta, get_fermion_basis
+from utility.helpers import k_delta, get_fermion_basis
 
 L_CUT = 2
 ROTOR_DIM = (2 * L_CUT + 1)
@@ -83,27 +83,27 @@ def get_mel(epsilon, U, t, q_nums, q_nums_prime):
     mat_el = (
         (
             epsilon*(n1_up + n1_down + n2_up + n2_down) + (U/2)*(l1**2 + l2**2)
-        ) * delta(n1_up, n1_up_prime) * delta(n1_down, n1_down_prime) * delta(n2_up, n2_up_prime) * delta(n2_down, n2_down_prime) * delta(l1, l1_prime) * delta(l2, l2_prime)
+        ) * k_delta(n1_up, n1_up_prime) * k_delta(n1_down, n1_down_prime) * k_delta(n2_up, n2_up_prime) * k_delta(n2_down, n2_down_prime) * k_delta(l1, l1_prime) * k_delta(l2, l2_prime)
         - t * (
-              ((-1) ** (n1_down_prime)) * delta(0, n1_up_prime) * delta(1, n2_up_prime) 
-            * delta(n1_up, n1_up_prime + 1) * delta(n1_down, n1_down_prime)
-            * delta(n2_up, n2_up_prime - 1) * delta(n2_down, n2_down_prime)
-            * delta(l1, l1_prime + 1) * delta(l2, l2_prime - 1)
+              ((-1) ** (n1_down_prime)) * k_delta(0, n1_up_prime) * k_delta(1, n2_up_prime) 
+            * k_delta(n1_up, n1_up_prime + 1) * k_delta(n1_down, n1_down_prime)
+            * k_delta(n2_up, n2_up_prime - 1) * k_delta(n2_down, n2_down_prime)
+            * k_delta(l1, l1_prime + 1) * k_delta(l2, l2_prime - 1)
 
-            + ((-1) ** (n1_down_prime)) * delta(1, n1_up_prime) * delta(0, n2_up_prime) 
-            * delta(n1_up, n1_up_prime - 1) * delta(n1_down, n1_down_prime)
-            * delta(n2_up, n2_up_prime + 1) * delta(n2_down, n2_down_prime)
-            * delta(l1, l1_prime - 1) * delta(l2, l2_prime + 1)
+            + ((-1) ** (n1_down_prime)) * k_delta(1, n1_up_prime) * k_delta(0, n2_up_prime) 
+            * k_delta(n1_up, n1_up_prime - 1) * k_delta(n1_down, n1_down_prime)
+            * k_delta(n2_up, n2_up_prime + 1) * k_delta(n2_down, n2_down_prime)
+            * k_delta(l1, l1_prime - 1) * k_delta(l2, l2_prime + 1)
 
-            + ((-1) ** (n2_up_prime)) * delta(0, n1_down_prime) * delta(1, n2_down_prime)
-            * delta(n1_up, n1_up_prime) * delta(n1_down, n1_down_prime + 1) 
-            * delta(n2_up, n2_up_prime) * delta(n2_down, n2_down_prime - 1)
-            * delta(l1, l1_prime + 1) * delta(l2, l2_prime - 1)
+            + ((-1) ** (n2_up_prime)) * k_delta(0, n1_down_prime) * k_delta(1, n2_down_prime)
+            * k_delta(n1_up, n1_up_prime) * k_delta(n1_down, n1_down_prime + 1) 
+            * k_delta(n2_up, n2_up_prime) * k_delta(n2_down, n2_down_prime - 1)
+            * k_delta(l1, l1_prime + 1) * k_delta(l2, l2_prime - 1)
 
-            + ((-1) ** (n2_up_prime)) * delta(1, n1_down_prime) * delta(0, n2_down_prime) 
-            * delta(n1_up, n1_up_prime) * delta(n1_down, n1_down_prime - 1)
-            * delta(n2_up, n2_up_prime) * delta(n2_down, n2_down_prime + 1)
-            * delta(l1, l1_prime - 1) * delta(l2, l2_prime + 1)
+            + ((-1) ** (n2_up_prime)) * k_delta(1, n1_down_prime) * k_delta(0, n2_down_prime) 
+            * k_delta(n1_up, n1_up_prime) * k_delta(n1_down, n1_down_prime - 1)
+            * k_delta(n2_up, n2_up_prime) * k_delta(n2_down, n2_down_prime + 1)
+            * k_delta(l1, l1_prime - 1) * k_delta(l2, l2_prime + 1)
         )
     )
 

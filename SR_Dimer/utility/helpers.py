@@ -4,8 +4,12 @@ import itertools
 """
     Constants used for computation
 """
-KB_SI = 1.380649 * 10**(-23)
-KB_EV = 8.617333262 * 10**(-5)
+
+HBAR_SI = 1.054571817 * 1e-34
+KB_SI = 1.380649 * 1e-23
+
+HBAR_EV = 6.582119569 * 1e-16
+KB_EV = 8.617333262 * 1e-5
 
 
 """
@@ -18,11 +22,23 @@ def get_fermion_basis():
     
     return np.array(basis)
 
+
 """
     Kronecker Delta function
 """
-def delta(x, y):
+def k_delta(x, y):
     return int(x == y)
+
+
+"""
+    Dirac Delta function
+
+    x: int; Input value
+    eta: float; Small parameter, Lorentzian goes to delta function as \eta -> 0
+"""
+def d_delta(x, eta=1e-3):
+    lorentz = eta/(np.pi * (x**2 + eta**2))
+    return lorentz
 
 """
     Fermi-Dirac distribution function

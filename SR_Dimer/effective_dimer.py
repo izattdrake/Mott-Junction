@@ -39,8 +39,8 @@ def get_eff_rotor_index(l1, l2, l_max):
     Returns effective rotor matrix elements <l1,l2|H_{theta}|l1_prime, l2_prime>
 """
 def get_eff_H_rotor_mel(U, h, J_eff, l1, l2, l1_prime, l2_prime):
-    diag = ((U / 2) * (l1**2 + l2**2) + h*(l1 + l2)) * helpers.delta(l1,l1_prime) * helpers.delta(l2,l2_prime)
-    off_diag = -J_eff * (helpers.delta(l1, l1_prime + 1) * helpers.delta(l2, l2_prime - 1) + helpers.delta(l1, l1_prime - 1) * helpers.delta(l2, l2_prime + 1))
+    diag = ((U / 2) * (l1**2 + l2**2) + h*(l1 + l2)) * helpers.k_delta(l1,l1_prime) * helpers.k_delta(l2,l2_prime)
+    off_diag = -J_eff * (helpers.k_delta(l1, l1_prime + 1) * helpers.k_delta(l2, l2_prime - 1) + helpers.k_delta(l1, l1_prime - 1) * helpers.k_delta(l2, l2_prime + 1))
     
     return diag + off_diag
 
@@ -178,7 +178,6 @@ def get_L(U, h, J_eff, beta, l_max, SITE=1):
     num_sum, den_sum = 0.0, 0.0
 
     for i in range(rotor_dim):
-
         rotor_energy = rotor_energies[i]
         boltzmann = np.exp(-beta * rotor_energy)
         state = rotor_states[:,i]
@@ -264,24 +263,72 @@ def update_params(epsilon, U, t, h_guess, J_eff_guess, beta, l_max):
 
     return h_update, t_eff_update, J_eff_update, nf
 
-def spectral_spinon():
-    return 
+def spinon_spectrum(omega, beta):
+    E_plus = get_E_plus(epsilon, h, t_eff)
+    E_minus = get_E_minus(epsilon, h, t_eff)
 
-def spectral_rotor():
-    return 
+    energies = [E_plus, E_minus]
+
+    spectrum = 0.0
+    for energy in energies:
+        spectrum += helpers.d_delta(omega - energy) * (1 - helpers.fermi_dirac(energy, beta) + helpers.d_delta(omega + energy)) * helpers.fermi_dirac(energy, beta)
+
+    return spectrum
+
+"""
+    Rotor spectral function
+    Calculation is incredibly computationally expensive
+    Basically useless
+"""
+def rotor_spectrum(omega, energies, states, beta, l_max):
+    rotor_dim = (2 * l_max + 1)**2
+
+    rotor_basis = get_eff_rotor_basis(l_max)
+    basis_index = {tuple(state): i for i, state in enumerate(rotor_basis)}
+    energies = energies - energies[0]
+
+    num_sum, den_sum = 0.0, 0.0
+    count = 0
+    for i in range(rotor_dim):
+        state1 = states[:,i]
+        energy1 = energies[i]
+
+        boltzmann = np.exp(-beta * energy1)
+        rotor_sum = 0.0
+
+        for j in range(rotor_dim):
+            state2 = states[:,j]
+            energy2 = energies[j]
+
+            for m in range(rotor_dim):
+                l1, l2 = rotor_basis[m]
+
+                for n in range(rotor_dim):
+                    l1_prime, l2_prime = rotor_basis[n]
+                    
+                    if (not l1 == -l_max) and (not l1_prime == l_max):
+                        rotor_sum += (
+                            np.conj(state1[basis_index[l1,l2]]) * state1[basis_index[l1_prime+1,l2_prime]]
+                            * np.conj(state2[basis_index[l1_prime,l2_prime]]) * state2[basis_index[l1-1,l2]]
+                            * helpers.d_delta(omega - (energy1 - energy2))
+                        )
+
+        num_sum += boltzmann * rotor_sum
+        den_sum += boltzmann
+
+    spectrum = num_sum / den_sum
+    return spectrum
 
 if __name__ == '__main__':
-    l_max = 3
+    l_max = 5
     rotor_dim = (2*l_max + 1)**2
 
     epsilon = 0.5
     t = 1.0
     U = 5.0
-    beta = 10
-    
-    # particle number in (0,2)
+    beta = 10    # particle number in (0,2)
     particle_num = 1.0
-    h, t_eff, J_eff, nf = update_params(epsilon, U, 0.8*t, 0.3, 0.8*t, beta, l_max)
+    h, t_eff, J_eff, nf = update_params(epsilon, U, 0.8 * t, 0.3, 0.8 * t, beta, l_max)
 
     print(f'h: {h}')
     print(f't_eff: {t_eff}')
@@ -290,8 +337,8 @@ if __name__ == '__main__':
 
     H_rotor = get_eff_H_rotor(U, h, J_eff, l_max)
     energies, states = np.linalg.eigh(H_rotor)
-    gs = states[:,0]
-    plot_rotor_pair_weight(gs,l_max)
+
+    rotor_spectrum(1, energies, states, beta, l_max)
         
         
 
