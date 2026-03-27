@@ -30,6 +30,15 @@ def plot_rotor_weight(rotor_state, l_max):
     plt.grid(True)
     plt.show()
 
+def plot_1D(x_vals, y_vals, title=None, x_label=None, y_label=None):
+    plt.figure(figsize=(8, 5))
+    plt.plot(x_vals, y_vals, linewidth=2)
+    plt.title(title, fontsize=14)
+    plt.xlabel(x_label), plt.ylabel(y_label)
+    plt.grid(True, linestyle="--", alpha=0.6)
+    plt.tight_layout()
+    plt.show()
+
 def plot_rotor_pair_weight(rotor_vector, l_max):
     """
     Plot rotor vector coefficients in the |ℓ₁ℓ₂⟩ two-rotor basis.

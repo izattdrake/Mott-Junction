@@ -252,6 +252,10 @@ def update(t, U, mu, h, Z, K):
     L_d_diag = (L_plus_dh - L_minus_dh)/dh
     np.fill_diagonal(J, nf_d_diag - L_d_diag)
 
+    for i in range(SITES - 2):
+        J[i + 1,i] = -0.05 * J[i,i]
+        J[i, i+1] = -0.05 * J[i,i]
+
     delta = nf - L - np.full(SITES,N_AT/2)
     dh_vec = np.linalg.solve(J, -delta)
     h_prime = h + dh_vec

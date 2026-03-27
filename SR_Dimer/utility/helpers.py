@@ -46,8 +46,8 @@ def k_delta(x, y):
     x: int; Input value
     eta: float; Small parameter, Lorentzian goes to delta function as \eta -> 0
 """
-def d_delta(x, eta=1e-3):
-    lorentz = eta/(np.pi * (x**2 + eta**2))
+def d_delta(x, eta=1e-4):
+    lorentz = (eta/np.pi)/(x**2 + eta**2)
     return lorentz
 
 """

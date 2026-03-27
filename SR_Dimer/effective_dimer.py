@@ -5,11 +5,18 @@ import itertools
 import sys
 
 import utility.helpers as helpers
-from utility.plotting import plot_rotor_pair_weight, plot_def_number_spectrum
+from utility.plotting import plot_rotor_pair_weight, plot_def_number_spectrum, plot_1D
+
+P0_L_VALS = []
+P1_L_VALS = [(-1,0), (0,-1)]
+P2_L_VALS = [(0,0), (1,-1), (-1,1)]
+P3_L_VALS = [(1,0), (0,1)]
+P4_L_VALS = [(1,1)]
+
 """
     Code for the effective dimer
     Spinon and rotor Hamiltonians are coupled by effective spinon and rotor tunneling amplitudes
-    No mean-field approximation
+    Mean-field decouples spinon and rotors, separate site rotors still decoupled  
     Rotors at seperate sites are coupled, leading to an infinity x infinity dimensional rotor Fock space
     Computation is untenable for many-sites, but doable for dimer
     Good problem to bridge the gap between the exact and mean-field problems
@@ -124,7 +131,8 @@ def get_spinon_index(n1_up, n1_down, n2_up, n2_down):
 
 """
     Returns the superposition of spinon states coming from gamma excitations, the diagoanlized Hamiltonian states
-    I want to use this to check the Fermi-Dirac vs 
+    I want to use this to check the Fermi-Dirac vs exact picture
+    The hand-written calculation is kind of cumbersome though so idk if I'll get around to it
 """
 def get_spinon_from_gamma():
     return 
@@ -239,6 +247,8 @@ def update_params(epsilon, U, t, h_guess, J_eff_guess, beta, l_max):
     t_eff_update = get_t_eff(U, t, h_update, J_eff_guess, beta, l_max)
     J_eff_update = get_J_eff(epsilon, h_update, t, t_eff_update, beta)
 
+    alpha = 0.1
+
     while not did_converge:
         h = h_update
         t_eff = t_eff_update 
@@ -251,18 +261,18 @@ def update_params(epsilon, U, t, h_guess, J_eff_guess, beta, l_max):
         d_L = get_d_L(U, h, dh, J_eff, beta, l_max)
 
         # Newton's method
-        h_update = h - (nf - L - 1)/(d_nf - d_L)
+        h_update = h - alpha * (nf - L - 1)/(d_nf - d_L)
 
         # Get updated params
         t_eff_update = get_t_eff(U, t, h_update, J_eff, beta, l_max)
         J_eff_update = get_J_eff(epsilon, h_update, t, t_eff_update, beta)
 
-        if (np.abs(h_update - h) < 1e-4) and (np.abs(t_eff_update - t_eff) < 1e-4) and (np.abs(J_eff_update - J_eff) < 1e-4):
+        if (np.abs(h_update - h) < 1e-6) and (np.abs(t_eff_update - t_eff) < 1e-6) and (np.abs(J_eff_update - J_eff) < 1e-6):
             did_converge = True
 
     return h_update, t_eff_update, J_eff_update, nf
 
-def spinon_spectrum(omega, beta):
+def spinon_spectrum(omega, epsilon, h, t_eff, beta):
     E_plus = get_E_plus(epsilon, h, t_eff)
     E_minus = get_E_minus(epsilon, h, t_eff)
 
@@ -280,29 +290,30 @@ def spinon_spectrum(omega, beta):
     Basically useless
 """
 def rotor_spectrum(omega, energies, states, beta, l_max):
-    rotor_dim = (2 * l_max + 1)**2
-
+    dim = len(energies)
+    print(f'dim: {dim}')
     rotor_basis = get_eff_rotor_basis(l_max)
     basis_index = {tuple(state): i for i, state in enumerate(rotor_basis)}
+
     energies = energies - energies[0]
 
     num_sum, den_sum = 0.0, 0.0
-    count = 0
-    for i in range(rotor_dim):
+
+    for i in range(dim):
         state1 = states[:,i]
         energy1 = energies[i]
 
         boltzmann = np.exp(-beta * energy1)
         rotor_sum = 0.0
-
-        for j in range(rotor_dim):
+        
+        for j in range(dim):
             state2 = states[:,j]
             energy2 = energies[j]
 
-            for m in range(rotor_dim):
+            for m in range(dim):
                 l1, l2 = rotor_basis[m]
 
-                for n in range(rotor_dim):
+                for n in range(dim):
                     l1_prime, l2_prime = rotor_basis[n]
                     
                     if (not l1 == -l_max) and (not l1_prime == l_max):
@@ -318,34 +329,55 @@ def rotor_spectrum(omega, energies, states, beta, l_max):
     spectrum = num_sum / den_sum
     return spectrum
 
+"""
+    Uses the (1,0,...), (0,1,...), nature of some parameter's eigenvector solutions to quickly calculate the rotor spectral function
+"""
+def rotor_spectrum_quick(omega, energies, beta):
+    dim = len(energies)
+
+    # Gets first term done with cutoff to not include energies below ground state (dont exist)
+    spectral_val = np.exp(-beta * energies[0]) * helpers.d_delta(omega - energies[0], 1e-2)
+
+    for i in range(1,dim):
+        energy1 = energies[i]
+        energy0 = energies[i-1]
+        boltzmann = np.exp(-beta * energy1)
+
+        spectral_val += boltzmann * helpers.d_delta(omega - (energy1 - energy0), 1e-2)
+
+    return spectral_val
+
+
 if __name__ == '__main__':
-    l_max = 8
-    rotor_dim = (2*l_max + 1)**2
+    l_max = 5
+    rotor_dim = (2 * l_max + 1)**2
 
     epsilon = 0.5
     t = 1.0
-    U = 8.0
-    beta = 50    # particle number in (0,2)
+    U = 7.0
+    beta = 5
     particle_num = 1.0
 
     J_vals = [3,4,5,6,7,8]
     spinon_energies = []
-    for J in J_vals:
-        h, t_eff, J_eff, nf = update_params(epsilon, U, 0.8 * t, 0.4, 0.8 * t, beta, l_max)
 
-        """
-            print(f'h: {h}')
-            print(f't_eff: {t_eff}')
-            print(f'J_eff: {J_eff}')
-            print(f'nf: {nf}')
-        """
-        H_rotor = get_eff_H_rotor(U, h, J_eff, l_max)
-        energies, states = np.linalg.eigh(H_rotor)
+    h, t_eff, J_eff, nf = update_params(epsilon, U, 0.8 * t, 0.4, 0.8 * t, beta, l_max)
 
-        E_plus = get_E_plus(epsilon, h, t_eff)
-        E_minus = get_E_minus(epsilon, h, t_eff)
+    H_rotor = get_eff_H_rotor(U, h, J_eff, l_max)
+    energies, states = np.linalg.eigh(H_rotor)
 
-        spinon_energies.append([E_plus, E_minus])
+    basis = get_eff_rotor_basis(l_max)
+    print('here1')
 
+    omega_vals = np.linspace(-50, 50, 8000)
+    spectral_vals = []
 
-    plot_def_number_spectrum(epsilon, t, J_vals, PLOT_P2=True, PLOT_EFF=True, EFF_ENERGIES=spinon_energies)
+    count = 0
+    for omega in omega_vals:
+        val = rotor_spectrum_quick(omega, energies, beta)
+        spectral_vals.append(val)
+        count += 1
+        print(count) 
+
+    plot_1D(omega_vals, spectral_vals, 'Rotor half-filling spectral function')
+    print(spectral_vals)
