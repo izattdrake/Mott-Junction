@@ -88,3 +88,16 @@ def check_Z(U, K, h, nf, N_AT=2):
     Z = (2 * U * K/(U * U - 4 * (U * x + h))) ** 2
 
     return Z
+
+def exact_1P_energies(t):
+    return [-t,-t,t,t]
+
+def exact_2P_energies(U,t):
+    c = np.sqrt(U**2 + 16 * t**2)
+    return [(U - c) / 2, 0, 0, 0, U, (U + c) / 2]
+
+def exact_3P_energies(U,t):
+    return [U - t, U - t, U + t, U + t]
+
+def exact_4P_energies(U):
+    return 2 * U

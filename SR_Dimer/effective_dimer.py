@@ -7,6 +7,7 @@ import sys
 import utility.helpers as helpers
 from utility.plotting import plot_rotor_pair_weight, plot_def_number_spectrum, plot_1D
 
+# l vals corresponding to definite 0,1,2,3,4 particles 
 P0_L_VALS = []
 P1_L_VALS = [(-1,0), (0,-1)]
 P2_L_VALS = [(0,0), (1,-1), (-1,1)]
@@ -367,7 +368,6 @@ if __name__ == '__main__':
     energies, states = np.linalg.eigh(H_rotor)
 
     basis = get_eff_rotor_basis(l_max)
-    print('here1')
 
     omega_vals = np.linspace(-50, 50, 8000)
     spectral_vals = []
