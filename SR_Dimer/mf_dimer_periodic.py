@@ -246,13 +246,13 @@ def update_params(epsilon, t, U, mu, t_eff_guess, h_guess, Z_guess, K_guess, bet
         h_update = np.zeros(2)
 
         for i in range(2):
-            h_update[i] = h[i] - ALPHA_H*(nf[i] - L[i] - 1.0)/(d_nf[i] - d_L[i])
+            h_update[i] = h[i] - ALPHA_H * (nf[i] - L[i] - 1.0)/(d_nf[i] - d_L[i])
 
         Z_update = (1 - ALPHA_Z) * Z + ALPHA_Z * get_Z(rotor_site_eigenvals, rotor_site_eigenvecs, beta, l_max)
         K_update = (1 - ALPHA_K) * K + ALPHA_K * get_K(t, Z_update, spinon_eigvals, spinon_eigvecs, beta)
         t_eff_update = (1 - ALPHA_T_EFF) * t_eff + ALPHA_T_EFF * get_t_eff(t, Z_update)
 
-        if (np.abs(h_update - h) < 1e-6).all() and (np.abs(t_eff_update - t_eff) < 1e-6) and (np.abs(Z_update - Z) < 1e-6).all() and (np.abs(K_update - K) < 1e-6).all():
+        if (np.abs(h_update - h) < 1e-8).all() and (np.abs(t_eff_update - t_eff) < 1e-8) and (np.abs(Z_update - Z) < 1e-8).all() and (np.abs(K_update - K) < 1e-8).all():
             did_converge = True
         else:
             num_cycles += 1
@@ -270,46 +270,79 @@ def rotor_state_ps(theta, state, l_max):
 
     return sum 
 
+def spinon_spectral():
+    return 
+
+
 if __name__ == '__main__':
-    print_params = False
-    l_max = 5
+    print_params = True 
+    plot_gs = True 
+
+    l_max = 11
     ROTOR_DIM = 2 * l_max + 1
 
     epsilon = 0.5
     t = 1.0
-    U = 0.000001
-    beta = 100.0
+    U = 1.0
+    beta = 50.0
 
-    mu = np.full(2, 0.0)
-    h_guess = np.full(2, -0.4*epsilon)
-    Z_guess = np.full(2, 0.9)
-    K_guess = np.full(2,-0.8)
+    mu = np.full(2, 0.5)
+    h_guess = np.full(2, 0.5*epsilon)
+    Z_guess = np.full(2, 0.8)
+    K_guess = np.full(2,-0.5)
 
-    h, Z, K, t_eff, nf, L, num_cycles = update_params(epsilon, t, U, mu, 0.8 * t, h_guess, Z_guess, K_guess, beta, l_max)
+    gs_vals = []
+    theta_vals = np.linspace(0, 2*np.pi, 200)
 
-    if print_params:
-        print(f'h: {h}')
-        print(f'Z: {Z}')
-        print(f'K: {K}')
-        print(f't_eff: {t_eff}')
-        print(f'nf: {nf}')
-        print(f'L: {L}')
-        print(f'num_cycles: {num_cycles}')
+    for U in [0.01, 0.1, 0.5, 1.0, 2.0, 3.0, 4.0, 5.0]:
+        h, Z, K, t_eff, nf, L, num_cycles = update_params(epsilon, t, U, mu, 0.9 * t, h_guess, Z_guess, K_guess, beta, l_max)
 
-    rotor_site_eigenvecs, rotor_site_eigenvals = np.zeros((2, ROTOR_DIM, ROTOR_DIM)), np.zeros((2, ROTOR_DIM))
-    H_rotors = get_H_rotors(U, h, K, l_max)
-    for i in range(2):
-        rotor_site_eigenvals[i], rotor_site_eigenvecs[i] = np.linalg.eigh(H_rotors[i])
+        if print_params:
+            print(f'h: {h}')
+            print(f'Z: {Z}')
+            print(f'K: {K}')
+            print(f't_eff: {t_eff}')
+            print(f'nf: {nf}')
+            print(f'L: {L}')
+            print(f'num_cycles: {num_cycles}')
 
-    # Assume eigenvectors at each site are the same (THEY ARE FOR NO CHEMICAL POTENTIAL DIFFERENTIAL)
-    rotor_eigenvecs = rotor_site_eigenvecs[0]
-    for i in range(ROTOR_DIM):
-        rotor_gs = rotor_eigenvecs[i]
-        
-        theta_vals = np.linspace(0, 2*np.pi, 200)
-        rotor_gs_vals = np.array([np.abs(rotor_state_ps(theta, rotor_gs, l_max)) for theta in theta_vals])
+        rotor_site_eigenvecs, rotor_site_eigenvals = np.zeros((2, ROTOR_DIM, ROTOR_DIM)), np.zeros((2, ROTOR_DIM))
+        H_rotors = get_H_rotors(U, h, K, l_max)
+        for i in range(2):
+            rotor_site_eigenvals[i], rotor_site_eigenvecs[i] = np.linalg.eigh(H_rotors[i])
 
-        # Plot real values of rotor ground state
-        SR_plotting.plot_1D(theta_vals, rotor_gs_vals, 'Rotor ground state as a function of angle')
-    
+        if plot_gs:
+            # Assume eigenvectors at each site are the same (THEY ARE FOR NO CHEMICAL POTENTIAL DIFFERENTIAL)
+            rotor_eigenvecs = rotor_site_eigenvecs[1]
+            for i in range(1):
+                rotor_gs = rotor_eigenvecs[:,i]
+                
+                rotor_gs_vals = np.array([np.abs(rotor_state_ps(theta, rotor_gs, l_max)) for theta in theta_vals])
+                gs_vals.append(rotor_gs_vals)
 
+    plt.plot(theta_vals, gs_vals[0], label="U/t=0.01")
+    plt.plot(theta_vals, gs_vals[1], label="U/t=0.1")
+    plt.plot(theta_vals, gs_vals[2], label="U/t=0.5")
+    plt.plot(theta_vals, gs_vals[3], label="U/t=1.0")
+    plt.plot(theta_vals, gs_vals[4], label="U/t=2.0")
+    plt.plot(theta_vals, gs_vals[5], label="U/t=3.0")
+    plt.plot(theta_vals, gs_vals[6], label="U/t=4.0")
+    plt.plot(theta_vals, gs_vals[7], label="U/t=5.0")
+
+
+    # Customize x-axis ticks
+    plt.xticks(
+        [0, np.pi, 2*np.pi],
+        [r'$0$', r'$\pi$', r'$2\pi$']
+    )
+
+    # Labels and legend
+    plt.xlabel(r'$\theta$')
+    plt.ylabel(r'$\Psi_0(\theta)$')
+    plt.legend()
+    plt.title(r'Rotor ground state at a range of $U/t$ at $\epsilon_0 = 0.5$, $\mu = 0$')
+    # Optional: improve layout
+    plt.tight_layout()
+
+    # Show plot
+    plt.show()

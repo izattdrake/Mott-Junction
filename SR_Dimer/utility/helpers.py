@@ -60,7 +60,7 @@ def fermi_dirac(E, beta, mu=0):
     # Assume at large enough beta, the temperature is zero
     # May solve computational singularities at small temperature
     # Need to play around with it and understand natural energy scales better
-    if beta > 40:
+    if beta > 50:
         occ = np.where(E < mu, 1.0, 0.0)
     else:
         occ = 0.5*(1-np.tanh(x))
