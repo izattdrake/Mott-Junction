@@ -214,8 +214,8 @@ def get_L(U, h, J_eff, beta, l_max, SITE=1):
     Return derivative of nf with respect to h
 """
 def get_d_nf(epsilon, h, dh, t_eff, beta):
-    nf_plus = get_nf(epsilon, h + dh/2, t_eff, beta)
-    nf_minus = get_nf(epsilon, h - dh/2, t_eff, beta)
+    nf_plus = get_nf(epsilon, h + dh /2.0, t_eff, beta)
+    nf_minus = get_nf(epsilon, h - dh/2.0, t_eff, beta)
 
     d_nf = (nf_plus - nf_minus) / dh
 
@@ -362,7 +362,7 @@ if __name__ == '__main__':
     J_vals = [3,4,5,6,7,8]
     spinon_energies = []
 
-    h, t_eff, J_eff, nf = update_params(epsilon, U, 0.8 * t, 0.4, 0.8 * t, beta, l_max)
+    h, t_eff, J_eff, nf = update_params(epsilon, U, t, 0.4, 0.8 * t, beta, l_max)
 
     H_rotor = get_eff_H_rotor(U, h, J_eff, l_max)
     energies, states = np.linalg.eigh(H_rotor)

@@ -2,7 +2,7 @@ import numpy as np
 import exact_dimer
 import utility.helpers as helpers
 
-import mf_dimer_numerical as mf
+import SR_Dimer.mf_dimer_finite as mf
 from utility.plotting import plot_def_number_spectrum
 
 if __name__ == '__main__':    
