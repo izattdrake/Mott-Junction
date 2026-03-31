@@ -3,7 +3,6 @@ import matplotlib.pyplot as plt
 
 from mpl_toolkits.mplot3d import Axes3D
 from exact_dimer import get_phys_basis, get_def_particle_basis, get_H
-from SR_Dimer.mf_dimer_finite import *
 from utility.helpers import *
 
 """

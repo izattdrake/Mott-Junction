@@ -5,6 +5,7 @@ import warnings
 import sys 
 import os
 
+import utility.plotting as SR_plotting
 from utility.helpers import *
 
 warnings.simplefilter("error", RuntimeWarning)
@@ -163,10 +164,10 @@ def get_H_spinon(epsilon, t_eff, mu, h):
 """
 Return array of rotor Hamiltonians at each site
 """
-def get_H_rotors(U, h, K, L_MAX):
-    ROTOR_DIM = 2 * L_MAX + 1
+def get_H_rotors(U, h, K, l_max):
+    ROTOR_DIM = 2 * l_max + 1
     H_sites = np.zeros((2, ROTOR_DIM, ROTOR_DIM))
-    l_vals = np.arange(-L_MAX, L_MAX + 1)
+    l_vals = np.arange(-l_max, l_max + 1)
     
     for i in range(2):
         H = np.zeros((ROTOR_DIM, ROTOR_DIM))
@@ -207,18 +208,21 @@ def get_K(t, Z, spinon_eigvals, spinon_eigvecs, beta):
     TODO: Find a closed form analytic solution using perturbation theory
     NOTE: Analytic solutions may not be possible due to recursion
 """
-def update_params(epsilon, t, U, mu, h_guess, Z_guess, K_guess, beta, l_max):
+def update_params(epsilon, t, U, mu, t_eff_guess, h_guess, Z_guess, K_guess, beta, l_max):
+    ALPHA_H = 0.1
+    ALPHA_Z = 0.1
+    ALPHA_K = 0.1
+    ALPHA_T_EFF = 0.1
+
     dh = 1e-3
-    ALPHA = 0.1
     ROTOR_DIM = 2 * l_max + 1
 
-    h_update, Z_update, K_update = h_guess, Z_guess, K_guess
-    t_eff_update = get_t_eff(t, Z_update)
+    h_update, Z_update, K_update, t_eff_update = h_guess, Z_guess, K_guess, t_eff_guess
 
     did_converge = False
+    num_cycles = 1.0
     while not did_converge:
         h, Z, K, t_eff = h_update, Z_update, K_update, t_eff_update
-
         # Used for calculating nf and L derivatives with finite difference methods 
         h_p, h_m = h + dh/2, h - dh/2
 
@@ -242,49 +246,70 @@ def update_params(epsilon, t, U, mu, h_guess, Z_guess, K_guess, beta, l_max):
         h_update = np.zeros(2)
 
         for i in range(2):
-            h_update[i] = h[i] - ALPHA*(nf[i] - L[i] - 1.0)/(d_nf[i] - d_L[i])
+            h_update[i] = h[i] - ALPHA_H*(nf[i] - L[i] - 1.0)/(d_nf[i] - d_L[i])
 
-        Z_update = get_Z(rotor_site_eigenvals, rotor_site_eigenvecs, beta, l_max)
-        K_update = get_K(t, Z_update, spinon_eigvals, spinon_eigvecs, beta)
-        t_eff_update = get_t_eff(t, Z_update)
-
-        print(f'h_update: {h_update}')
-        print(f'h: {h}')
-        print(f't_eff_update: {t_eff_update}')
-        print(f't_eff: {t_eff}')
-        print(f'Z_update: {Z_update}')
-        print(f'Z: {Z}')
-        print(f'K_update: {K_update}')
-        print(f'K: {K}')
+        Z_update = (1 - ALPHA_Z) * Z + ALPHA_Z * get_Z(rotor_site_eigenvals, rotor_site_eigenvecs, beta, l_max)
+        K_update = (1 - ALPHA_K) * K + ALPHA_K * get_K(t, Z_update, spinon_eigvals, spinon_eigvecs, beta)
+        t_eff_update = (1 - ALPHA_T_EFF) * t_eff + ALPHA_T_EFF * get_t_eff(t, Z_update)
 
         if (np.abs(h_update - h) < 1e-6).all() and (np.abs(t_eff_update - t_eff) < 1e-6) and (np.abs(Z_update - Z) < 1e-6).all() and (np.abs(K_update - K) < 1e-6).all():
             did_converge = True
+        else:
+            num_cycles += 1
 
-    return h_update, Z_update, K_update, t_eff, nf, L
+    return h_update, Z_update, K_update, t_eff, nf, L, num_cycles
+
+def rotor_state_ps(theta, state, l_max):
+    rotor_dim = 2 * l_max + 1
+
+    sum = 0.0j
+    for i in range(rotor_dim):
+        l = i - l_max
+        weight = state[i]
+        sum += weight * np.exp(l * theta * 1.0j)
+
+    return sum 
 
 if __name__ == '__main__':
+    print_params = False
     l_max = 5
-    rotor_dim = (2 * l_max + 1)**2
+    ROTOR_DIM = 2 * l_max + 1
 
     epsilon = 0.5
     t = 1.0
-    U = 7.0
-    beta = 5.0
-    particle_num = 1.0
-
-    J_vals = [3,4,5,6,7,8]
-    spinon_energies = []
+    U = 0.000001
+    beta = 100.0
 
     mu = np.full(2, 0.0)
-    h_guess = np.full(2, -epsilon)
-    Z_guess = np.full(2, 0.1)
-    K_guess = np.full(2,-0.2)
+    h_guess = np.full(2, -0.4*epsilon)
+    Z_guess = np.full(2, 0.9)
+    K_guess = np.full(2,-0.8)
 
-    h, Z, K, t_eff, nf, L = update_params(epsilon, t, U, mu, h_guess, Z_guess, K_guess, beta, l_max)
-    print(f'h: {h}')
-    print(f'Z: {Z}')
-    print(f'K: {K}')
-    print(f't_eff: {t_eff}')
-    print(f'nf: {nf}')
-    print(f'L: {L}')
+    h, Z, K, t_eff, nf, L, num_cycles = update_params(epsilon, t, U, mu, 0.8 * t, h_guess, Z_guess, K_guess, beta, l_max)
+
+    if print_params:
+        print(f'h: {h}')
+        print(f'Z: {Z}')
+        print(f'K: {K}')
+        print(f't_eff: {t_eff}')
+        print(f'nf: {nf}')
+        print(f'L: {L}')
+        print(f'num_cycles: {num_cycles}')
+
+    rotor_site_eigenvecs, rotor_site_eigenvals = np.zeros((2, ROTOR_DIM, ROTOR_DIM)), np.zeros((2, ROTOR_DIM))
+    H_rotors = get_H_rotors(U, h, K, l_max)
+    for i in range(2):
+        rotor_site_eigenvals[i], rotor_site_eigenvecs[i] = np.linalg.eigh(H_rotors[i])
+
+    # Assume eigenvectors at each site are the same (THEY ARE FOR NO CHEMICAL POTENTIAL DIFFERENTIAL)
+    rotor_eigenvecs = rotor_site_eigenvecs[0]
+    for i in range(ROTOR_DIM):
+        rotor_gs = rotor_eigenvecs[i]
+        
+        theta_vals = np.linspace(0, 2*np.pi, 200)
+        rotor_gs_vals = np.array([np.abs(rotor_state_ps(theta, rotor_gs, l_max)) for theta in theta_vals])
+
+        # Plot real values of rotor ground state
+        SR_plotting.plot_1D(theta_vals, rotor_gs_vals, 'Rotor ground state as a function of angle')
+    
 
