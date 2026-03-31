@@ -55,7 +55,7 @@ def get_index(q_nums):
     Physical states must have zero eigenvalues on both dimer sites
 """
 def get_constraint_operator(site):
-    mixed_basis = get_spinon_basis()
+    mixed_basis = get_mixed_basis()
     operator = np.zeros((DIM, DIM))
 
     if (not site == 0) and (not site == 1):
