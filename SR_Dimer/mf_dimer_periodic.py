@@ -10,9 +10,9 @@ from utility.helpers import *
 
 warnings.simplefilter("error", RuntimeWarning)
 
-N_AT = 2
+N_AT = 4
 
-def get_nf(epsilon, spinon_eigvals, spinon_eigvecs, beta):
+def get_nf(spinon_eigvals, spinon_eigvecs, beta):
     nf = np.zeros(2)
 
     for i in range(2):
@@ -34,7 +34,7 @@ def get_d_nf(epsilon, h, dh, t_eff, beta, mu):
     eigvals_p, eigvecs_p = np.linalg.eigh(get_H_spinon(epsilon, t_eff, h_p, mu))
     eigvals_m, eigvecs_m = np.linalg.eigh(get_H_spinon(epsilon, t_eff, h_m, mu))
 
-    nf_p, nf_m = get_nf(epsilon, eigvals_p, eigvecs_p, beta), get_nf(epsilon, eigvals_m, eigvecs_m, beta)
+    nf_p, nf_m = get_nf(eigvals_p, eigvecs_p, beta), get_nf(eigvals_m, eigvecs_m, beta)
     d_nf = (nf_p - nf_m) / dh
 
     return d_nf
@@ -186,7 +186,7 @@ def get_H_rotors(U, h, K, l_max):
 """
 Return K
 """
-def get_K(epsilon, t, Z, spinon_eigvals, spinon_eigvecs, beta):
+def get_K(t, Z, spinon_eigvals, spinon_eigvecs, beta):
     K = np.zeros(2)
 
     sums = [0.0, 0.0]  
@@ -209,11 +209,11 @@ def get_K(epsilon, t, Z, spinon_eigvals, spinon_eigvecs, beta):
     NOTE: Analytic solutions may not be possible due to recursion
 """
 def update_params(epsilon, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l_max, N_target=2.0):
-    ALPHA_H = 0.1
-    ALPHA_Z = 0.1
-    ALPHA_K = 0.1
-    ALPHA_T_EFF = 0.1
-    ALPHA_MU = 0.1
+    ALPHA_H = 0.01
+    ALPHA_Z = 0.01
+    ALPHA_K = 0.01
+    ALPHA_T_EFF = 0.01
+    ALPHA_MU = 0.01
 
     mu = 0.0
 
@@ -240,7 +240,7 @@ def update_params(epsilon, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l
         """
         Calculate nf, L, and other parameters for next cycle
         """
-        nf = get_nf(epsilon, spinon_eigvals, spinon_eigvecs, beta)
+        nf = get_nf(spinon_eigvals, spinon_eigvecs, beta)
         L = get_L(rotor_site_eigenvals, rotor_site_eigenvecs, beta, l_max)
 
         d_nf = get_d_nf(epsilon, h, dh, t_eff, beta, mu)
@@ -249,10 +249,10 @@ def update_params(epsilon, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l
         h_update = np.zeros(2)
 
         for i in range(2):
-            h_update[i] = h[i] - ALPHA_H * (nf[i] - L[i] - 1.0)/(d_nf[i] - d_L[i])
+            h_update[i] = h[i] - ALPHA_H * (nf[i] - L[i] - N_AT/2.0)/(d_nf[i] - d_L[i])
 
         Z_update = (1 - ALPHA_Z) * Z + ALPHA_Z * get_Z(rotor_site_eigenvals, rotor_site_eigenvecs, beta, l_max)
-        K_update = (1 - ALPHA_K) * K + ALPHA_K * get_K(epsilon, t, Z_update, spinon_eigvals, spinon_eigvecs, beta)
+        K_update = (1 - ALPHA_K) * K + ALPHA_K * get_K(t, Z_update, spinon_eigvals, spinon_eigvecs, beta)
         t_eff_update = (1 - ALPHA_T_EFF) * t_eff + ALPHA_T_EFF * get_t_eff(t, Z_update)
 
         N_total = np.sum(nf)
@@ -261,9 +261,19 @@ def update_params(epsilon, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l
         if (np.abs(h_update - h) < 1e-6).all() and (np.abs(t_eff_update - t_eff) < 1e-6) and (np.abs(Z_update - Z) < 1e-6).all() and (np.abs(K_update - K) < 1e-6).all() and (np.abs(N_target - N_total) < 1e-3):
             did_converge = True
         else:
+            print(f'cycle: {num_cycles}')
+            print(f'h: {h}')
+            print(f'Z: {Z}')
+            print(f'K: {K}')
+            print(f't_eff: {t_eff}')
+            print(f'nf: {nf}')
+            print(f'L: {L}')
+            print(f'mu: {mu}')
+            print(f'N: {np.sum(nf)}\n')
+
             num_cycles += 1
 
-    return h_update, Z_update, K_update, t_eff, nf, L, num_cycles
+    return h_update, Z_update, K_update, t_eff, nf, L, mu, num_cycles
 
 def rotor_state_ps(theta, state, l_max):
     rotor_dim = 2 * l_max + 1
@@ -285,7 +295,7 @@ if __name__ == '__main__':
 
     t = 1.0
     beta = 50.0
-    N_target = 2.0
+    N_target = 6.0
 
     # epsilon used for on-site energy - chemical potential 
     epsilon = np.zeros(2)
@@ -298,7 +308,7 @@ if __name__ == '__main__':
     theta_vals = np.linspace(0, 2*np.pi, 200)
 
     for U in [1.0]:
-        h, Z, K, t_eff, nf, L, num_cycles = update_params(epsilon, t, U, 0.8 * t, h_guess, Z_guess, K_guess, beta, l_max, N_target)
+        h, Z, K, t_eff, nf, L, mu, num_cycles = update_params(epsilon, t, U, 0.8 * t, h_guess, Z_guess, K_guess, beta, l_max, N_target)
 
         if print_params:
             print(f'h: {h}')
@@ -307,7 +317,7 @@ if __name__ == '__main__':
             print(f't_eff: {t_eff}')
             print(f'nf: {nf}')
             print(f'L: {L}')
-            print(f'N: {nf[0] + nf[1]}')
+            print(f'N: {np.sum(nf)}')
             print(f'num_cycles: {num_cycles}\n')
 
         if plot_gs:
