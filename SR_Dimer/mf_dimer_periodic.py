@@ -12,7 +12,7 @@ warnings.simplefilter("error", RuntimeWarning)
 
 N_AT = 2
 
-def get_nf(spinon_eigvals, spinon_eigvecs, beta):
+def get_nf(epsilon, spinon_eigvals, spinon_eigvecs, beta):
     nf = np.zeros(2)
 
     for i in range(2):
@@ -28,13 +28,13 @@ def get_nf(spinon_eigvals, spinon_eigvecs, beta):
 """
     Return derivative of nf with respect to h
 """
-def get_d_nf(epsilon, h, dh, t_eff, beta):
+def get_d_nf(epsilon, h, dh, t_eff, beta, mu):
     h_p, h_m = h + dh/2, h - dh/2
 
-    eigvals_p, eigvecs_p = np.linalg.eigh(get_H_spinon(epsilon, t_eff, mu, h_p))
-    eigvals_m, eigvecs_m = np.linalg.eigh(get_H_spinon(epsilon, t_eff, mu, h_m))
+    eigvals_p, eigvecs_p = np.linalg.eigh(get_H_spinon(epsilon, t_eff, h_p, mu))
+    eigvals_m, eigvecs_m = np.linalg.eigh(get_H_spinon(epsilon, t_eff, h_m, mu))
 
-    nf_p, nf_m = get_nf(eigvals_p, eigvecs_p, beta), get_nf(eigvals_m, eigvecs_m, beta)
+    nf_p, nf_m = get_nf(epsilon, eigvals_p, eigvecs_p, beta), get_nf(epsilon, eigvals_m, eigvecs_m, beta)
     d_nf = (nf_p - nf_m) / dh
 
     return d_nf
@@ -152,10 +152,10 @@ Return real-space spinon Hamiltonian in the upper-block
 The single-particle spinon Hamiltonian is block diagonalized with each block corresponding to a spin
 I think we only have to diagonalize a single one of these blocks, but I am not sure
 """
-def get_H_spinon(epsilon, t_eff, mu, h):
+def get_H_spinon(epsilon, t_eff, h, mu):
     H = np.zeros((2, 2))
 
-    np.fill_diagonal(H, epsilon - mu - h)
+    np.fill_diagonal(H, epsilon - h - mu)
     H[0,1], H[1,0] = -t_eff, -t_eff
 
     return H
@@ -186,7 +186,7 @@ def get_H_rotors(U, h, K, l_max):
 """
 Return K
 """
-def get_K(t, Z, spinon_eigvals, spinon_eigvecs, beta):
+def get_K(epsilon, t, Z, spinon_eigvals, spinon_eigvecs, beta):
     K = np.zeros(2)
 
     sums = [0.0, 0.0]  
@@ -208,13 +208,16 @@ def get_K(t, Z, spinon_eigvals, spinon_eigvecs, beta):
     TODO: Find a closed form analytic solution using perturbation theory
     NOTE: Analytic solutions may not be possible due to recursion
 """
-def update_params(epsilon, t, U, mu, t_eff_guess, h_guess, Z_guess, K_guess, beta, l_max):
+def update_params(epsilon, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l_max, N_target=2.0):
     ALPHA_H = 0.1
     ALPHA_Z = 0.1
     ALPHA_K = 0.1
     ALPHA_T_EFF = 0.1
+    ALPHA_MU = 0.1
 
-    dh = 1e-3
+    mu = 0.0
+
+    dh = 1e-4
     ROTOR_DIM = 2 * l_max + 1
 
     h_update, Z_update, K_update, t_eff_update = h_guess, Z_guess, K_guess, t_eff_guess
@@ -226,7 +229,7 @@ def update_params(epsilon, t, U, mu, t_eff_guess, h_guess, Z_guess, K_guess, bet
         # Used for calculating nf and L derivatives with finite difference methods 
         h_p, h_m = h + dh/2, h - dh/2
 
-        spinon_eigvals, spinon_eigvecs = np.linalg.eigh(get_H_spinon(epsilon, t_eff, mu, h))
+        spinon_eigvals, spinon_eigvecs = np.linalg.eigh(get_H_spinon(epsilon, t_eff, h, mu))
 
         # H_\theta(h)
         rotor_site_eigenvecs, rotor_site_eigenvals = np.zeros((2, ROTOR_DIM, ROTOR_DIM)), np.zeros((2, ROTOR_DIM))
@@ -237,10 +240,10 @@ def update_params(epsilon, t, U, mu, t_eff_guess, h_guess, Z_guess, K_guess, bet
         """
         Calculate nf, L, and other parameters for next cycle
         """
-        nf = get_nf(spinon_eigvals, spinon_eigvecs, beta)
+        nf = get_nf(epsilon, spinon_eigvals, spinon_eigvecs, beta)
         L = get_L(rotor_site_eigenvals, rotor_site_eigenvecs, beta, l_max)
-        
-        d_nf = get_d_nf(epsilon, h, dh, t_eff, beta)
+
+        d_nf = get_d_nf(epsilon, h, dh, t_eff, beta, mu)
         d_L = get_d_L(U, h, dh, K, l_max)
 
         h_update = np.zeros(2)
@@ -249,10 +252,13 @@ def update_params(epsilon, t, U, mu, t_eff_guess, h_guess, Z_guess, K_guess, bet
             h_update[i] = h[i] - ALPHA_H * (nf[i] - L[i] - 1.0)/(d_nf[i] - d_L[i])
 
         Z_update = (1 - ALPHA_Z) * Z + ALPHA_Z * get_Z(rotor_site_eigenvals, rotor_site_eigenvecs, beta, l_max)
-        K_update = (1 - ALPHA_K) * K + ALPHA_K * get_K(t, Z_update, spinon_eigvals, spinon_eigvecs, beta)
+        K_update = (1 - ALPHA_K) * K + ALPHA_K * get_K(epsilon, t, Z_update, spinon_eigvals, spinon_eigvecs, beta)
         t_eff_update = (1 - ALPHA_T_EFF) * t_eff + ALPHA_T_EFF * get_t_eff(t, Z_update)
 
-        if (np.abs(h_update - h) < 1e-8).all() and (np.abs(t_eff_update - t_eff) < 1e-8) and (np.abs(Z_update - Z) < 1e-8).all() and (np.abs(K_update - K) < 1e-8).all():
+        N_total = np.sum(nf)
+        mu += ALPHA_MU * (N_target - N_total)
+
+        if (np.abs(h_update - h) < 1e-6).all() and (np.abs(t_eff_update - t_eff) < 1e-6) and (np.abs(Z_update - Z) < 1e-6).all() and (np.abs(K_update - K) < 1e-6).all() and (np.abs(N_target - N_total) < 1e-3):
             did_converge = True
         else:
             num_cycles += 1
@@ -270,32 +276,29 @@ def rotor_state_ps(theta, state, l_max):
 
     return sum 
 
-def spinon_spectral():
-    return 
-
-
 if __name__ == '__main__':
-    print_params = True 
-    plot_gs = True 
+    print_params = True
+    plot_gs = False 
 
-    l_max = 11
+    l_max = 12
     ROTOR_DIM = 2 * l_max + 1
 
-    epsilon = 0.5
     t = 1.0
-    U = 1.0
     beta = 50.0
+    N_target = 2.0
 
-    mu = np.full(2, 0.5)
-    h_guess = np.full(2, 0.5*epsilon)
-    Z_guess = np.full(2, 0.8)
-    K_guess = np.full(2,-0.5)
+    # epsilon used for on-site energy - chemical potential 
+    epsilon = np.zeros(2)
+    t_eff_guess = 0.8 * t
+    h_guess = np.full(2, -epsilon)
+    Z_guess = np.full(2, 0.5)
+    K_guess = np.full(2,-1.0)
 
     gs_vals = []
     theta_vals = np.linspace(0, 2*np.pi, 200)
 
-    for U in [0.01, 0.1, 0.5, 1.0, 2.0, 3.0, 4.0, 5.0]:
-        h, Z, K, t_eff, nf, L, num_cycles = update_params(epsilon, t, U, mu, 0.9 * t, h_guess, Z_guess, K_guess, beta, l_max)
+    for U in [1.0]:
+        h, Z, K, t_eff, nf, L, num_cycles = update_params(epsilon, t, U, 0.8 * t, h_guess, Z_guess, K_guess, beta, l_max, N_target)
 
         if print_params:
             print(f'h: {h}')
@@ -304,45 +307,46 @@ if __name__ == '__main__':
             print(f't_eff: {t_eff}')
             print(f'nf: {nf}')
             print(f'L: {L}')
-            print(f'num_cycles: {num_cycles}')
-
-        rotor_site_eigenvecs, rotor_site_eigenvals = np.zeros((2, ROTOR_DIM, ROTOR_DIM)), np.zeros((2, ROTOR_DIM))
-        H_rotors = get_H_rotors(U, h, K, l_max)
-        for i in range(2):
-            rotor_site_eigenvals[i], rotor_site_eigenvecs[i] = np.linalg.eigh(H_rotors[i])
+            print(f'N: {nf[0] + nf[1]}')
+            print(f'num_cycles: {num_cycles}\n')
 
         if plot_gs:
-            # Assume eigenvectors at each site are the same (THEY ARE FOR NO CHEMICAL POTENTIAL DIFFERENTIAL)
-            rotor_eigenvecs = rotor_site_eigenvecs[1]
-            for i in range(1):
-                rotor_gs = rotor_eigenvecs[:,i]
+            rotor_site_eigenvecs, rotor_site_eigenvals = np.zeros((2, ROTOR_DIM, ROTOR_DIM)), np.zeros((2, ROTOR_DIM))
+            H_rotors = get_H_rotors(U, h, K, l_max)
+            for i in range(2):
+                rotor_site_eigenvals[i], rotor_site_eigenvecs[i] = np.linalg.eigh(H_rotors[i])
+
+                # Assume eigenvectors at each site are the same (THEY ARE FOR NO CHEMICAL POTENTIAL DIFFERENTIAL)
+                rotor_eigenvecs = rotor_site_eigenvecs[0]
+                rotor_gs = rotor_eigenvecs[:,0]
                 
                 rotor_gs_vals = np.array([np.abs(rotor_state_ps(theta, rotor_gs, l_max)) for theta in theta_vals])
                 gs_vals.append(rotor_gs_vals)
 
-    plt.plot(theta_vals, gs_vals[0], label="U/t=0.01")
-    plt.plot(theta_vals, gs_vals[1], label="U/t=0.1")
-    plt.plot(theta_vals, gs_vals[2], label="U/t=0.5")
-    plt.plot(theta_vals, gs_vals[3], label="U/t=1.0")
-    plt.plot(theta_vals, gs_vals[4], label="U/t=2.0")
-    plt.plot(theta_vals, gs_vals[5], label="U/t=3.0")
-    plt.plot(theta_vals, gs_vals[6], label="U/t=4.0")
-    plt.plot(theta_vals, gs_vals[7], label="U/t=5.0")
+    if plot_gs:
+        plt.plot(theta_vals, gs_vals[0], label="U/t=0.01")
+        plt.plot(theta_vals, gs_vals[1], label="U/t=0.1")
+        plt.plot(theta_vals, gs_vals[2], label="U/t=0.5")
+        plt.plot(theta_vals, gs_vals[3], label="U/t=1.0")
+        plt.plot(theta_vals, gs_vals[4], label="U/t=2.0")
+        plt.plot(theta_vals, gs_vals[5], label="U/t=2.5")
+        plt.plot(theta_vals, gs_vals[6], label="U/t=3.0")
+        plt.plot(theta_vals, gs_vals[7], label="U/t=3.5")
+        plt.plot(theta_vals, gs_vals[8], label="U/t=3.6")
 
+        # Customize x-axis ticks
+        plt.xticks(
+            [0, np.pi, 2*np.pi],
+            [r'$0$', r'$\pi$', r'$2\pi$']
+        )
 
-    # Customize x-axis ticks
-    plt.xticks(
-        [0, np.pi, 2*np.pi],
-        [r'$0$', r'$\pi$', r'$2\pi$']
-    )
+        # Labels and legend
+        plt.xlabel(r'$\theta$')
+        plt.ylabel(r'$\Psi_0(\theta)$')
+        plt.legend()
+        plt.title(r'Rotor ground state at a range of $U/t$ at $\epsilon_0 =$ ' + f'{epsilon}' + r', $\beta = $' + f'{beta}')
+        # Optional: improve layout
+        plt.tight_layout()
 
-    # Labels and legend
-    plt.xlabel(r'$\theta$')
-    plt.ylabel(r'$\Psi_0(\theta)$')
-    plt.legend()
-    plt.title(r'Rotor ground state at a range of $U/t$ at $\epsilon_0 = 0.5$, $\mu = 0$')
-    # Optional: improve layout
-    plt.tight_layout()
-
-    # Show plot
-    plt.show()
+        # Show plot
+        plt.show()
