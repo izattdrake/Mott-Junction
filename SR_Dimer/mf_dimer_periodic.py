@@ -10,7 +10,7 @@ from utility.helpers import *
 
 warnings.simplefilter("error", RuntimeWarning)
 
-N_AT = 4
+N_AT = 2
 
 def get_nf(spinon_eigvals, spinon_eigvecs, beta):
     nf = np.zeros(2)
@@ -209,10 +209,10 @@ def get_K(t, Z, spinon_eigvals, spinon_eigvecs, beta):
     NOTE: Analytic solutions may not be possible due to recursion
 """
 def update_params(epsilon, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l_max, N_target=2.0):
-    ALPHA_H = 0.01
-    ALPHA_Z = 0.01
-    ALPHA_K = 0.01
-    ALPHA_T_EFF = 0.01
+    ALPHA_H = 0.05
+    ALPHA_Z = 0.05
+    ALPHA_K = 0.05
+    ALPHA_T_EFF = 0.05
     ALPHA_MU = 0.01
 
     mu = 0.0
@@ -226,8 +226,6 @@ def update_params(epsilon, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l
     num_cycles = 1.0
     while not did_converge:
         h, Z, K, t_eff = h_update, Z_update, K_update, t_eff_update
-        # Used for calculating nf and L derivatives with finite difference methods 
-        h_p, h_m = h + dh/2, h - dh/2
 
         spinon_eigvals, spinon_eigvecs = np.linalg.eigh(get_H_spinon(epsilon, t_eff, h, mu))
 
@@ -261,16 +259,6 @@ def update_params(epsilon, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l
         if (np.abs(h_update - h) < 1e-6).all() and (np.abs(t_eff_update - t_eff) < 1e-6) and (np.abs(Z_update - Z) < 1e-6).all() and (np.abs(K_update - K) < 1e-6).all() and (np.abs(N_target - N_total) < 1e-3):
             did_converge = True
         else:
-            print(f'cycle: {num_cycles}')
-            print(f'h: {h}')
-            print(f'Z: {Z}')
-            print(f'K: {K}')
-            print(f't_eff: {t_eff}')
-            print(f'nf: {nf}')
-            print(f'L: {L}')
-            print(f'mu: {mu}')
-            print(f'N: {np.sum(nf)}\n')
-
             num_cycles += 1
 
     return h_update, Z_update, K_update, t_eff, nf, L, mu, num_cycles
@@ -289,49 +277,70 @@ def rotor_state_ps(theta, state, l_max):
 if __name__ == '__main__':
     print_params = True
     plot_gs = False 
+    plot_ZU = False 
+    plot_eff_m = True
+    plot_nfepsilon = False 
 
     l_max = 12
     ROTOR_DIM = 2 * l_max + 1
 
     t = 1.0
     beta = 50.0
-    N_target = 6.0
+    N_target = 2.0
 
     # epsilon used for on-site energy - chemical potential 
-    epsilon = np.zeros(2)
-    t_eff_guess = 0.8 * t
-    h_guess = np.full(2, -epsilon)
-    Z_guess = np.full(2, 0.5)
-    K_guess = np.full(2,-1.0)
 
     gs_vals = []
     theta_vals = np.linspace(0, 2*np.pi, 200)
 
-    for U in [1.0]:
-        h, Z, K, t_eff, nf, L, mu, num_cycles = update_params(epsilon, t, U, 0.8 * t, h_guess, Z_guess, K_guess, beta, l_max, N_target)
+    Z_vals = []
+    U_vals = [2.0]
 
-        if print_params:
-            print(f'h: {h}')
-            print(f'Z: {Z}')
-            print(f'K: {K}')
-            print(f't_eff: {t_eff}')
-            print(f'nf: {nf}')
-            print(f'L: {L}')
-            print(f'N: {np.sum(nf)}')
-            print(f'num_cycles: {num_cycles}\n')
+    epsilon_single_vals = np.linspace(-3.9, 4.0, 100)  # 0.0, 0.1, ..., 1.0
+    epsilon_vals = np.column_stack((epsilon_single_vals,epsilon_single_vals))
 
-        if plot_gs:
-            rotor_site_eigenvecs, rotor_site_eigenvals = np.zeros((2, ROTOR_DIM, ROTOR_DIM)), np.zeros((2, ROTOR_DIM))
-            H_rotors = get_H_rotors(U, h, K, l_max)
-            for i in range(2):
-                rotor_site_eigenvals[i], rotor_site_eigenvecs[i] = np.linalg.eigh(H_rotors[i])
+    nf_vals = []
+    eff_m_vals = []
+    for U in U_vals:
+        for epsilon in epsilon_vals:
+            t_eff_guess = 0.8 * t
+            h_guess = np.full(2, -epsilon)
+            Z_guess = np.full(2, 0.5)
+            K_guess = np.full(2,-1.0)
 
-                # Assume eigenvectors at each site are the same (THEY ARE FOR NO CHEMICAL POTENTIAL DIFFERENTIAL)
-                rotor_eigenvecs = rotor_site_eigenvecs[0]
-                rotor_gs = rotor_eigenvecs[:,0]
-                
-                rotor_gs_vals = np.array([np.abs(rotor_state_ps(theta, rotor_gs, l_max)) for theta in theta_vals])
-                gs_vals.append(rotor_gs_vals)
+            h, Z, K, t_eff, nf, L, mu, num_cycles = update_params(epsilon, t, U, 0.8 * t, h_guess, Z_guess, K_guess, beta, l_max, N_target)
+            
+            if print_params:
+                print(f'h: {h}')
+                print(f'Z: {Z}')
+                print(f'K: {K}')
+                print(f't_eff: {t_eff}')
+                print(f'nf: {nf}')
+                print(f'L: {L}')
+                print(f'N: {np.sum(nf)}')
+                print(f'num_cycles: {num_cycles}\n')
+
+            if plot_gs:
+                rotor_site_eigenvecs, rotor_site_eigenvals = np.zeros((2, ROTOR_DIM, ROTOR_DIM)), np.zeros((2, ROTOR_DIM))
+                H_rotors = get_H_rotors(U, h, K, l_max)
+                for i in range(2):
+                    rotor_site_eigenvals[i], rotor_site_eigenvecs[i] = np.linalg.eigh(H_rotors[i])
+
+                    # Assume eigenvectors at each site are the same (THEY ARE FOR NO CHEMICAL POTENTIAL DIFFERENTIAL)
+                    rotor_eigenvecs = rotor_site_eigenvecs[0]
+                    rotor_gs = rotor_eigenvecs[:,0]
+                    
+                    rotor_gs_vals = np.array([np.abs(rotor_state_ps(theta, rotor_gs, l_max)) for theta in theta_vals])
+                    gs_vals.append(rotor_gs_vals)
+
+            if plot_ZU:
+                Z_vals.append(Z)
+
+            if plot_eff_m:
+                eff_m_vals.append(1/Z)
+            
+            if plot_nfepsilon:
+                nf_vals.append(nf[0])
 
     if plot_gs:
         plt.plot(theta_vals, gs_vals[0], label="U/t=0.01")
@@ -354,9 +363,57 @@ if __name__ == '__main__':
         plt.xlabel(r'$\theta$')
         plt.ylabel(r'$\Psi_0(\theta)$')
         plt.legend()
-        plt.title(r'Rotor ground state at a range of $U/t$ at $\epsilon_0 =$ ' + f'{epsilon}' + r', $\beta = $' + f'{beta}')
+        plt.title(r'Rotor ground state at a range of $U/t$ at $\epsilon_0 =$ ' + f'{epsilon[0]}' + r', $\beta = $' + f'{beta}')
         # Optional: improve layout
         plt.tight_layout()
 
         # Show plot
+        plt.show()
+
+    if plot_ZU:
+        plt.plot(U_vals, Z_vals)
+
+        plt.xticks(
+            [0, 1, 2, 3, 4, 5],
+            ['0', '1', '2', '3', '4', '5']
+        )
+
+        plt.xlabel(r'$U/t$')
+        plt.ylabel(r'$Z$')
+        plt.title(r'Quasiparticle weight $Z$ as a function of $U/t$ at $\epsilon = $' + f'{epsilon[0]}, ' + r'$\beta = $' + f'{beta}')
+        plt.tight_layout()
+
+        plt.show()
+
+    if plot_eff_m:
+        plt.plot(epsilon_single_vals, eff_m_vals)
+
+        plt.xticks(
+            [-4, -2, 0, 2, 4],
+            ['-4', '-2', '0', '2', '4'],
+        )
+
+        plt.xlabel(r'$\epsilon_0$')
+        plt.ylabel(r'$m^*/m$')
+        plt.title(r'Quasiparticle weight $Z$ as a function of $\epsilon_0$ at $U = 2.0$')
+        plt.tight_layout()
+
+        plt.show()
+
+    if plot_nfepsilon:
+        plt.plot(epsilon_single_vals, nf_vals)
+        plt.xticks(
+            [-6, -4, -2, 0, 2, 4, 6],
+            ['-6', '-4', '-2', '0', '2', '4', '6'],
+        )
+
+        plt.yticks(
+            [0, 1, 2, 3, 4],
+            ['0', '1', '2', '3', '4']
+        )
+        plt.xlabel(r'$\epsilon_0$')
+        plt.ylabel(r'$n$')
+        plt.title(r'Occupancy for N=4')
+        plt.tight_layout()
+
         plt.show()
