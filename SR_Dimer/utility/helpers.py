@@ -54,7 +54,7 @@ def d_delta(x, eta=1e-4):
     Fermi-Dirac distribution function
 """
 def fermi_dirac(E, beta, mu=0):
-    x = (E - mu) * beta / 2
+    x = beta * (E - mu) / 2
     occ = 0.0
 
     # Assume at large enough beta, the temperature is zero
@@ -64,6 +64,15 @@ def fermi_dirac(E, beta, mu=0):
         occ = np.where(E < mu, 1.0, 0.0)
     else:
         occ = 0.5*(1-np.tanh(x))
+
+    return occ
+
+"""
+    Bose-Einstein distribution function
+"""
+def bose_einstein(E, beta):
+    x = beta * E / 2
+    occ = 0.5 * (np.coth(x) - 1)
 
     return occ
 

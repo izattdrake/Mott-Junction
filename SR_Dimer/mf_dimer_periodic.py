@@ -5,8 +5,8 @@ import warnings
 import sys 
 import os
 
+import utility.helpers as helpers
 import utility.plotting as SR_plotting
-from utility.helpers import *
 
 warnings.simplefilter("error", RuntimeWarning)
 
@@ -19,7 +19,7 @@ def get_nf(spinon_eigvals, spinon_eigvecs, beta):
         sum = 0.0
         for j in range(2):
             energy = spinon_eigvals[j]
-            sum += (np.abs(spinon_eigvecs[i,j]) ** 2) * fermi_dirac(energy, beta)
+            sum += (np.abs(spinon_eigvecs[i,j]) ** 2) * helpers.fermi_dirac(energy, beta)
 
         nf[i] = N_AT * sum
 
@@ -193,8 +193,8 @@ def get_K(t, Z, spinon_eigvals, spinon_eigvecs, beta):
 
     for i in range(2):
         energy = spinon_eigvals[i]
-        sums[0] += t * np.sqrt(Z[1]) * spinon_eigvecs.conj().T[i,0] * spinon_eigvecs[1,i] * fermi_dirac(energy, beta)
-        sums[1] += t * np.sqrt(Z[0]) * spinon_eigvecs.conj().T[i,1] * spinon_eigvecs[0,i] * fermi_dirac(energy, beta)
+        sums[0] += t * np.sqrt(Z[1]) * spinon_eigvecs.conj().T[i,0] * spinon_eigvecs[1,i] * helpers.fermi_dirac(energy, beta)
+        sums[1] += t * np.sqrt(Z[0]) * spinon_eigvecs.conj().T[i,1] * spinon_eigvecs[0,i] * helpers.fermi_dirac(energy, beta)
     
     K[0], K[1] = -2 * N_AT * sums[0], -2 * N_AT * sums[1]
 
@@ -274,146 +274,124 @@ def rotor_state_ps(theta, state, l_max):
 
     return sum 
 
+"""
+    Calculate spinon Green's function for periodic dimer
+"""
+def spinon_Green(omega: float, k: float, epsilon: float, t_eff: float, h: float, mu: float, eta=1e-4) -> np.complex64:
+    energy_k = -2 * t_eff * np.cos(k) + (epsilon - mu - h)
+    Green_val = 1/(omega - energy_k + eta*1j)
+
+    return Green_val 
+
+
+"""
+    Calculate spinon spectral density function for periodic dimer (allows usual wavevector Green's function analysis)
+    Assume translational symmetry
+"""
+def spinon_spectral(omega: float, epsilon: float, t_eff: float, h: float, mu: float, a=1.0, eta=1e-4):
+    spectral_val = 0.0
+
+    # Assume translational symmetry, sum over k = 0, pi/a
+    for n in range(2):
+        k = (np.pi/a) * n
+        energy_k = -2 * t_eff * np.cos(k * a) + (epsilon - mu - h)
+        spectral_val += helpers.d_delta(omega - energy_k)
+
+    return spectral_val
+
+
+def rotor_spectral(omega: float, U: float, h, K, beta: float, l_max):
+    ROTOR_DIM = 2 * l_max + 1
+    H_rotor = get_H_rotors(U, h, K, l_max)[0]
+    eig_vals, eig_vecs = np.linalg.eigh(H_rotor)
+    
+    spectral_val = 0.0
+    for i in range(ROTOR_DIM):
+        energy_1 = eig_vals[i]
+        state_1 = eig_vecs[:,i]
+
+        boltzmann_1 = np.exp(-beta * energy_1)
+        for j in range(i, ROTOR_DIM):
+            energy_2 = eig_vals[j]
+            state_2 = eig_vecs[:,j]
+
+            boltzmann_2 = np.exp(-beta * energy_2)
+
+            mel = 0.0
+
+            # Cut off at bottom to prevent improper indexing
+            for index in range(1, ROTOR_DIM):
+                mel += np.conj(state_1[index]) * state_2[index - 1]
+
+            spectral_val += boltzmann_1 * (np.abs(mel)**2) * helpers.d_delta(omega - (energy_2 - energy_1), eta=1e-2)
+            spectral_val += boltzmann_2 * (np.abs(mel)**2) * helpers.d_delta(omega - (energy_1 - energy_2), eta=1e-2)
+
+    return spectral_val
+
+
 if __name__ == '__main__':
     print_params = True
-    plot_gs = False 
-    plot_ZU = False 
-    plot_eff_m = True
-    plot_nfepsilon = False 
+    print_spinon_spectral = False
+    print_rotor_spectral = True
 
     l_max = 12
     ROTOR_DIM = 2 * l_max + 1
 
     t = 1.0
+    U = 2.0
     beta = 50.0
     N_target = 2.0
 
-    # epsilon used for on-site energy - chemical potential 
+    epsilon = np.zeros(2)
 
-    gs_vals = []
-    theta_vals = np.linspace(0, 2*np.pi, 200)
+    t_eff_guess = 0.8 * t
+    h_guess = np.full(2, -epsilon)
+    Z_guess = np.full(2, 0.5)
+    K_guess = np.full(2,-1.0)
 
-    Z_vals = []
-    U_vals = [2.0]
+    omega_vals = np.linspace(0, 10, 5000)
 
-    epsilon_single_vals = np.linspace(-3.9, 4.0, 100)  # 0.0, 0.1, ..., 1.0
-    epsilon_vals = np.column_stack((epsilon_single_vals,epsilon_single_vals))
+    h, Z, K, t_eff, nf, L, mu, num_cycles = update_params(epsilon, t, U, 0.8 * t, h_guess, Z_guess, K_guess, beta, l_max, N_target)
+    
+    if print_params:
+        print(f'h: {h}')
+        print(f'Z: {Z}')
+        print(f'K: {K}')
+        print(f't_eff: {t_eff}')
+        print(f'nf: {nf}')
+        print(f'L: {L}')
+        print(f'N: {np.sum(nf)}')
+        print(f'num_cycles: {num_cycles}\n')
 
-    nf_vals = []
-    eff_m_vals = []
-    for U in U_vals:
-        for epsilon in epsilon_vals:
-            t_eff_guess = 0.8 * t
-            h_guess = np.full(2, -epsilon)
-            Z_guess = np.full(2, 0.5)
-            K_guess = np.full(2,-1.0)
+    if print_spinon_spectral:
+        spinon_spectral_vals = [spinon_spectral(omega, epsilon[0], t_eff, h[0], mu) for omega in omega_vals]
 
-            h, Z, K, t_eff, nf, L, mu, num_cycles = update_params(epsilon, t, U, 0.8 * t, h_guess, Z_guess, K_guess, beta, l_max, N_target)
-            
-            if print_params:
-                print(f'h: {h}')
-                print(f'Z: {Z}')
-                print(f'K: {K}')
-                print(f't_eff: {t_eff}')
-                print(f'nf: {nf}')
-                print(f'L: {L}')
-                print(f'N: {np.sum(nf)}')
-                print(f'num_cycles: {num_cycles}\n')
-
-            if plot_gs:
-                rotor_site_eigenvecs, rotor_site_eigenvals = np.zeros((2, ROTOR_DIM, ROTOR_DIM)), np.zeros((2, ROTOR_DIM))
-                H_rotors = get_H_rotors(U, h, K, l_max)
-                for i in range(2):
-                    rotor_site_eigenvals[i], rotor_site_eigenvecs[i] = np.linalg.eigh(H_rotors[i])
-
-                    # Assume eigenvectors at each site are the same (THEY ARE FOR NO CHEMICAL POTENTIAL DIFFERENTIAL)
-                    rotor_eigenvecs = rotor_site_eigenvecs[0]
-                    rotor_gs = rotor_eigenvecs[:,0]
-                    
-                    rotor_gs_vals = np.array([np.abs(rotor_state_ps(theta, rotor_gs, l_max)) for theta in theta_vals])
-                    gs_vals.append(rotor_gs_vals)
-
-            if plot_ZU:
-                Z_vals.append(Z)
-
-            if plot_eff_m:
-                eff_m_vals.append(1/Z)
-            
-            if plot_nfepsilon:
-                nf_vals.append(nf[0])
-
-    if plot_gs:
-        plt.plot(theta_vals, gs_vals[0], label="U/t=0.01")
-        plt.plot(theta_vals, gs_vals[1], label="U/t=0.1")
-        plt.plot(theta_vals, gs_vals[2], label="U/t=0.5")
-        plt.plot(theta_vals, gs_vals[3], label="U/t=1.0")
-        plt.plot(theta_vals, gs_vals[4], label="U/t=2.0")
-        plt.plot(theta_vals, gs_vals[5], label="U/t=2.5")
-        plt.plot(theta_vals, gs_vals[6], label="U/t=3.0")
-        plt.plot(theta_vals, gs_vals[7], label="U/t=3.5")
-        plt.plot(theta_vals, gs_vals[8], label="U/t=3.6")
-
-        # Customize x-axis ticks
+        plt.plot(omega_vals, spinon_spectral_vals)
         plt.xticks(
-            [0, np.pi, 2*np.pi],
-            [r'$0$', r'$\pi$', r'$2\pi$']
-        )
-
-        # Labels and legend
-        plt.xlabel(r'$\theta$')
-        plt.ylabel(r'$\Psi_0(\theta)$')
-        plt.legend()
-        plt.title(r'Rotor ground state at a range of $U/t$ at $\epsilon_0 =$ ' + f'{epsilon[0]}' + r', $\beta = $' + f'{beta}')
-        # Optional: improve layout
-        plt.tight_layout()
-
-        # Show plot
-        plt.show()
-
-    if plot_ZU:
-        plt.plot(U_vals, Z_vals)
-
-        plt.xticks(
-            [0, 1, 2, 3, 4, 5],
-            ['0', '1', '2', '3', '4', '5']
-        )
-
-        plt.xlabel(r'$U/t$')
-        plt.ylabel(r'$Z$')
-        plt.title(r'Quasiparticle weight $Z$ as a function of $U/t$ at $\epsilon = $' + f'{epsilon[0]}, ' + r'$\beta = $' + f'{beta}')
-        plt.tight_layout()
-
-        plt.show()
-
-    if plot_eff_m:
-        plt.plot(epsilon_single_vals, eff_m_vals)
-
-        plt.xticks(
-            [-4, -2, 0, 2, 4],
-            ['-4', '-2', '0', '2', '4'],
-        )
-
-        plt.xlabel(r'$\epsilon_0$')
-        plt.ylabel(r'$m^*/m$')
-        plt.title(r'Quasiparticle weight $Z$ as a function of $\epsilon_0$ at $U = 2.0$')
-        plt.tight_layout()
-
-        plt.show()
-
-    if plot_nfepsilon:
-        plt.plot(epsilon_single_vals, nf_vals)
-        plt.xticks(
-            [-6, -4, -2, 0, 2, 4, 6],
-            ['-6', '-4', '-2', '0', '2', '4', '6'],
+            [-2, 0, 2],
+            ['-2', '0', '2'],
         )
 
         plt.yticks(
-            [0, 1, 2, 3, 4],
-            ['0', '1', '2', '3', '4']
+            [0, 100, 200],
+            ['0', '100', '200']
         )
-        plt.xlabel(r'$\epsilon_0$')
-        plt.ylabel(r'$n$')
-        plt.title(r'Occupancy for N=4')
+
+        plt.xlabel(r'$\omega$')
+        plt.ylabel(r'$\rho_f(\omega)$')
+        plt.title(r'Spinon spectral density function for $\epsilon_0 = $' + f'{epsilon[0]}, ' + r'$N = $' + f'{N_target}')
+        plt.tight_layout()
+
+        plt.show()
+
+    if print_rotor_spectral:
+        rotor_spectral_vals = [rotor_spectral(omega, U, h, K, beta, l_max) for omega in omega_vals]
+
+        plt.plot(omega_vals, rotor_spectral_vals)
+
+        plt.xlabel(r'$\omega$')
+        plt.ylabel(r'$\rho_f(\omega)$')
+        plt.title(r'Spinon spectral density function for $\epsilon_0 = $' + f'{epsilon[0]}, ' + r'$N = $' + f'{N_target}')
         plt.tight_layout()
 
         plt.show()
