@@ -312,6 +312,7 @@ def get_rotor_spectral(omega: float, U: float, h, K, beta: float, l_max):
         state_1 = eig_vecs[:,i]
 
         boltzmann_1 = np.exp(-beta * energy_1)
+
         for j in range(i, ROTOR_DIM):
             energy_2 = eig_vals[j]
             state_2 = eig_vecs[:,j]
@@ -319,15 +320,12 @@ def get_rotor_spectral(omega: float, U: float, h, K, beta: float, l_max):
             boltzmann_2 = np.exp(-beta * energy_2)
 
             mel = 0.0
+            mel = np.dot(np.conj(state_2[1:]), state_1[:-1])
 
-            # Cut off at bottom to prevent improper indexing
-            for index in range(1, ROTOR_DIM):
-                mel += np.conj(state_1[index]) * state_2[index-1]
-
-            spectral_val += boltzmann_2 * (np.abs(mel)**2) * helpers.d_delta(omega - (energy_2 - energy_1))
+            spectral_val += boltzmann_1 * (np.abs(mel)**2) * helpers.d_delta(omega - (energy_2 - energy_1))
 
             if not i == j:
-                spectral_val += boltzmann_1 * (np.abs(mel)**2) * helpers.d_delta(omega - (energy_1 - energy_2))
+                spectral_val += boltzmann_2 * (np.abs(mel)**2) * helpers.d_delta(omega - (energy_1 - energy_2))
 
     return spectral_val
 
@@ -341,14 +339,11 @@ def validate_rotor_spectrum(omega_vals, spectral_vals, beta):
     for omega_index in range(dim):
         omega = omega_vals[omega_index]
         m_omega_index = np.where(omega_vals == -omega)[0][0]
-        print(m_omega_index)
 
         if not (np.exp(beta * omega) * spectral_vals[m_omega_index] == spectral_vals[omega_index]):
-            print('failed')
-            return
+            return False
     
-    print('success')
-    return 
+    return True 
 
 
 """
@@ -364,6 +359,16 @@ def get_electron_spectral_vals(omega_vals: float, epsilon: float, U: float, t_ef
     fd_vals = np.array([helpers.fermi_dirac(omega, beta) for omega in omega_vals])
     be_vals = np.array([helpers.bose_einstein(omega, beta) for omega in omega_vals])
    
+    plt.plot(omega_vals, rotor_vals)
+
+    plt.xlabel(r'$\omega$')
+    plt.ylabel(r'$\rho_d(\omega)$', rotation='horizontal')
+    plt.title(r'Rotor')
+
+    plt.tight_layout()
+
+    plt.show()
+
     # See latex docs for definition of f1, f2, g1, g2
     f1_vals = spinon_vals * (1 - fd_vals)
     f2_vals = spinon_vals 
@@ -381,13 +386,13 @@ def get_electron_spectral_vals(omega_vals: float, epsilon: float, U: float, t_ef
 if __name__ == '__main__':
     print_params = True
     print_spinon_spectral = False
-    print_rotor_spectral = True
-    print_electron_spectral = False
+    print_rotor_spectral = False
+    print_electron_spectral = True
     l_max = 12
     ROTOR_DIM = 2 * l_max + 1
 
     t = 1.0
-    U = 0.1
+    U = 0.5
     beta = 50.0
     N_target = 2.0
 
@@ -435,19 +440,18 @@ if __name__ == '__main__':
 
     if print_rotor_spectral:
         rotor_spectral_vals = [get_rotor_spectral(omega, U, h, K, beta, l_max) for omega in omega_vals]
-        validate_rotor_spectrum(omega_vals, rotor_spectral_vals, beta)
+        print(f'Good spectral function: {validate_rotor_spectrum(omega_vals, rotor_spectral_vals, beta)}')
 
         plt.plot(omega_vals, rotor_spectral_vals)
 
         plt.xlabel(r'$\omega$')
         plt.ylabel(r'$\rho_f(\omega)$')
-        plt.title(r'Spinon spectral function for $\epsilon_0 = $' + f'{epsilon[0]}, ' + r'$N = $' + f'{N_target}')
+        plt.title(r'Rotor spectral function for $\epsilon_0 = $' + f'{epsilon[0]}, ' + r'$N = $' + f'{N_target}')
         plt.tight_layout()
 
         plt.show()
 
     if print_electron_spectral:
-        print('here')
         electron_spectral = get_electron_spectral_vals(omega_vals, epsilon, U, t_eff, h, mu, beta, l_max)
 
         plt.plot(omega_vals, electron_spectral)

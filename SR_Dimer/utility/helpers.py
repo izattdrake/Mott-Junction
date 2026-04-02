@@ -70,8 +70,12 @@ def fermi_dirac(E, beta, mu=0):
     Bose-Einstein distribution function
 """
 def bose_einstein(E, beta):
-    x = beta * E / 2
-    x_safe = np.maximum(x, 1e-12)
+    x = beta * E
+
+    if x > 0:
+        x_safe = np.maximum(x, 1e-12)
+    elif x < 0:
+        x_safe = -np.maximum(np.abs(x), 1e-12)
 
     n = 1 / np.expm1(x_safe)
 
