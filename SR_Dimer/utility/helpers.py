@@ -55,26 +55,27 @@ def d_delta(x, eta=1e-4):
 """
 def fermi_dirac(E, beta, mu=0):
     x = beta * (E - mu) / 2
-    occ = 0.0
 
     # Assume at large enough beta, the temperature is zero
     # May solve computational singularities at small temperature
     # Need to play around with it and understand natural energy scales better
     if beta > 50:
-        occ = np.where(E < mu, 1.0, 0.0)
+        n = np.where(E < mu, 1.0, 0.0)
     else:
-        occ = 0.5*(1-np.tanh(x))
+        n = 0.5*(1-np.tanh(x))
 
-    return occ
+    return n
 
 """
     Bose-Einstein distribution function
 """
 def bose_einstein(E, beta):
     x = beta * E / 2
-    occ = 0.5 * (np.coth(x) - 1)
+    x_safe = np.maximum(x, 1e-12)
 
-    return occ
+    n = 1 / np.expm1(x_safe)
+
+    return n
 
 """
     Partition function

@@ -4,6 +4,7 @@ import time
 import warnings
 import sys 
 import os
+import scipy
 
 import utility.helpers as helpers
 import utility.plotting as SR_plotting
@@ -288,7 +289,7 @@ def spinon_Green(omega: float, k: float, epsilon: float, t_eff: float, h: float,
     Calculate spinon spectral density function for periodic dimer (allows usual wavevector Green's function analysis)
     Assume translational symmetry
 """
-def spinon_spectral(omega: float, epsilon: float, t_eff: float, h: float, mu: float, a=1.0, eta=1e-4):
+def get_spinon_spectral(omega: float, epsilon: float, t_eff: float, h: float, mu: float, a=1.0, eta=1e-4):
     spectral_val = 0.0
 
     # Assume translational symmetry, sum over k = 0, pi/a
@@ -300,7 +301,7 @@ def spinon_spectral(omega: float, epsilon: float, t_eff: float, h: float, mu: fl
     return spectral_val
 
 
-def rotor_spectral(omega: float, U: float, h, K, beta: float, l_max):
+def get_rotor_spectral(omega: float, U: float, h, K, beta: float, l_max):
     ROTOR_DIM = 2 * l_max + 1
     H_rotor = get_H_rotors(U, h, K, l_max)[0]
     eig_vals, eig_vecs = np.linalg.eigh(H_rotor)
@@ -321,24 +322,72 @@ def rotor_spectral(omega: float, U: float, h, K, beta: float, l_max):
 
             # Cut off at bottom to prevent improper indexing
             for index in range(1, ROTOR_DIM):
-                mel += np.conj(state_1[index]) * state_2[index - 1]
+                mel += np.conj(state_1[index]) * state_2[index-1]
 
-            spectral_val += boltzmann_1 * (np.abs(mel)**2) * helpers.d_delta(omega - (energy_2 - energy_1), eta=1e-2)
-            spectral_val += boltzmann_2 * (np.abs(mel)**2) * helpers.d_delta(omega - (energy_1 - energy_2), eta=1e-2)
+            spectral_val += boltzmann_2 * (np.abs(mel)**2) * helpers.d_delta(omega - (energy_2 - energy_1))
+
+            if not i == j:
+                spectral_val += boltzmann_1 * (np.abs(mel)**2) * helpers.d_delta(omega - (energy_1 - energy_2))
 
     return spectral_val
 
+
+"""
+    Check condition on rotor spectral function that it must satisfy to be correct
+"""
+def validate_rotor_spectrum(omega_vals, spectral_vals, beta):
+    dim = len(omega_vals)
+
+    for omega_index in range(dim):
+        omega = omega_vals[omega_index]
+        m_omega_index = np.where(omega_vals == -omega)[0][0]
+        print(m_omega_index)
+
+        if not (np.exp(beta * omega) * spectral_vals[m_omega_index] == spectral_vals[omega_index]):
+            print('failed')
+            return
+    
+    print('success')
+    return 
+
+
+"""
+    Returns the electron spectral function for all values of omega using Scipy's FFT convolution method
+"""
+def get_electron_spectral_vals(omega_vals: float, epsilon: float, U: float, t_eff: float, h: float, mu: float, beta, l_max, a=1.0, eta=1e-4):
+    domega = np.abs(omega_vals[1] - omega_vals[0])
+
+    # Super weird with whether I'm passing scalar or vector values for some parameters. Should clean up soon
+    spinon_vals = np.array([get_spinon_spectral(omega, epsilon[0], t_eff, h[0], mu) for omega in omega_vals])
+    rotor_vals = np.array([get_rotor_spectral(omega, U, h, K, beta, l_max) for omega in omega_vals])
+
+    fd_vals = np.array([helpers.fermi_dirac(omega, beta) for omega in omega_vals])
+    be_vals = np.array([helpers.bose_einstein(omega, beta) for omega in omega_vals])
+   
+    # See latex docs for definition of f1, f2, g1, g2
+    f1_vals = spinon_vals * (1 - fd_vals)
+    f2_vals = spinon_vals 
+
+    g1_vals = rotor_vals
+    g2_vals = rotor_vals * be_vals
+
+    spectral_1 = scipy.signal.fftconvolve(f1_vals, g1_vals, mode='same') * domega
+    spectral_2 = scipy.signal.fftconvolve(f2_vals, g2_vals, mode='same') * domega
+
+    phys_spectral = spectral_1 + spectral_2
+
+    return phys_spectral
 
 if __name__ == '__main__':
     print_params = True
     print_spinon_spectral = False
     print_rotor_spectral = True
-
+    print_electron_spectral = False
     l_max = 12
     ROTOR_DIM = 2 * l_max + 1
 
     t = 1.0
-    U = 2.0
+    U = 0.1
     beta = 50.0
     N_target = 2.0
 
@@ -349,7 +398,7 @@ if __name__ == '__main__':
     Z_guess = np.full(2, 0.5)
     K_guess = np.full(2,-1.0)
 
-    omega_vals = np.linspace(0, 10, 5000)
+    omega_vals = np.linspace(-10, 10, 6000)
 
     h, Z, K, t_eff, nf, L, mu, num_cycles = update_params(epsilon, t, U, 0.8 * t, h_guess, Z_guess, K_guess, beta, l_max, N_target)
     
@@ -364,12 +413,12 @@ if __name__ == '__main__':
         print(f'num_cycles: {num_cycles}\n')
 
     if print_spinon_spectral:
-        spinon_spectral_vals = [spinon_spectral(omega, epsilon[0], t_eff, h[0], mu) for omega in omega_vals]
+        spinon_spectral_vals = [get_spinon_spectral(omega, epsilon[0], t_eff, h[0], mu) for omega in omega_vals]
 
         plt.plot(omega_vals, spinon_spectral_vals)
         plt.xticks(
-            [-2, 0, 2],
-            ['-2', '0', '2'],
+            [-2, -1, 0, 1, 2],
+            ['-2', '-1', '0', '1', '2'],
         )
 
         plt.yticks(
@@ -385,13 +434,28 @@ if __name__ == '__main__':
         plt.show()
 
     if print_rotor_spectral:
-        rotor_spectral_vals = [rotor_spectral(omega, U, h, K, beta, l_max) for omega in omega_vals]
+        rotor_spectral_vals = [get_rotor_spectral(omega, U, h, K, beta, l_max) for omega in omega_vals]
+        validate_rotor_spectrum(omega_vals, rotor_spectral_vals, beta)
 
         plt.plot(omega_vals, rotor_spectral_vals)
 
         plt.xlabel(r'$\omega$')
         plt.ylabel(r'$\rho_f(\omega)$')
-        plt.title(r'Spinon spectral density function for $\epsilon_0 = $' + f'{epsilon[0]}, ' + r'$N = $' + f'{N_target}')
+        plt.title(r'Spinon spectral function for $\epsilon_0 = $' + f'{epsilon[0]}, ' + r'$N = $' + f'{N_target}')
+        plt.tight_layout()
+
+        plt.show()
+
+    if print_electron_spectral:
+        print('here')
+        electron_spectral = get_electron_spectral_vals(omega_vals, epsilon, U, t_eff, h, mu, beta, l_max)
+
+        plt.plot(omega_vals, electron_spectral)
+
+        plt.xlabel(r'$\omega$')
+        plt.ylabel(r'$\rho_d(\omega)$', rotation='horizontal')
+        plt.title(r'Physical spectral function for $\epsilon_0 = $' + f'{epsilon[0]}, ' + r'$N = $' + f'{N_target}')
+
         plt.tight_layout()
 
         plt.show()
