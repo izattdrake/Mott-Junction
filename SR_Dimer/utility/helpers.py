@@ -103,15 +103,19 @@ def check_Z(U, K, h, nf, N_AT=2):
 
     return Z
 
-def exact_1P_energies(t):
-    return [-t,-t,t,t]
-
-def exact_2P_energies(U,t):
-    c = np.sqrt(U**2 + 16 * t**2)
-    return [(U - c) / 2, 0, 0, 0, U, (U + c) / 2]
-
-def exact_3P_energies(U,t):
-    return [U - t, U - t, U + t, U + t]
-
-def exact_4P_energies(U):
-    return 2 * U
+def get_exact_spectrum(U, t, N):
+    if N == 0:
+        energies = [0]
+    elif N == 1:
+        energies = [-t,-t,t,t]
+    elif N == 2:
+        c = np.sqrt(U**2 + 16 * t**2)
+        energies = [(U - c) / 2, 0, 0, 0, U, (U + c) / 2]
+    elif N == 3:
+        energies = [U - t, U - t, U + t, U + t]
+    elif N == 4:
+        energies = [2 * U]
+    else:
+        raise ValueError('N must be 0,1,2,3,4')
+    
+    return energies

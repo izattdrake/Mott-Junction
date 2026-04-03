@@ -289,51 +289,74 @@ def spinon_Green(omega: float, k: float, epsilon: float, t_eff: float, h: float,
     Calculate spinon spectral density function for periodic dimer (allows usual wavevector Green's function analysis)
     Assume translational symmetry
 """
-def get_spinon_spectral(omega: float, epsilon: float, t_eff: float, h: float, mu: float, a=1.0, eta=1e-4):
-    spectral_val = 0.0
-
-    # Assume translational symmetry, sum over k = 0, pi/a
-    for n in range(2):
-        k = (np.pi/a) * n
-        energy_k = -2 * t_eff * np.cos(k * a) + (epsilon - mu - h)
-        spectral_val += helpers.d_delta(omega - energy_k)
-
-    return spectral_val
 
 
-def get_rotor_spectral(omega: float, U: float, h, K, beta: float, l_max):
-    ROTOR_DIM = 2 * l_max + 1
-    H_rotor = get_H_rotors(U, h, K, l_max)[0]
-    eig_vals, eig_vecs = np.linalg.eigh(H_rotor)
+def spinon_spectrum(omega_vals, epsilon: float, t_eff: float, h: float, mu: float):
+    def spinon_spectral_val(omega: float, epsilon: float, t_eff: float, h: float, mu: float, a=1.0, eta=1e-4):
+        spectral_val = 0.0
+
+        # Assume translational symmetry, sum over k = 0, pi/a
+        N = 2
+        for n in range(N):
+            k = (2*np.pi/(N*a)) * n
+            energy_k = -2 * t_eff * np.cos(k * a) + (epsilon - mu - h)
+            spectral_val += helpers.d_delta(omega - energy_k)
+
+        return spectral_val
     
-    spectral_val = 0.0
-    for i in range(ROTOR_DIM):
-        energy_1 = eig_vals[i]
-        state_1 = eig_vecs[:,i]
+    spectrum = np.array([spinon_spectral_val(omega, epsilon[0], t_eff, h[0], mu) for omega in omega_vals])
+    
+    norm = scipy.integrate.trapezoid(spectrum, omega_vals)
+    print(f'spinon norm: {norm}')
+    spectrum_normalized = spectrum / norm
 
-        boltzmann_1 = np.exp(-beta * energy_1)
+    return spectrum_normalized
 
-        for j in range(i, ROTOR_DIM):
-            energy_2 = eig_vals[j]
-            state_2 = eig_vecs[:,j]
+def rotor_spectrum(omega_vals, U: float, h, K, beta: float, l_max: int, overwrite=False):
+    def get_rotor_spectral_val(omega: float, U: float, h, K, beta: float, l_max):
+        ROTOR_DIM = 2 * l_max + 1
+        H_rotor = get_H_rotors(U, h, K, l_max)[0]
+        eig_vals, eig_vecs = np.linalg.eigh(H_rotor)
 
-            boltzmann_2 = np.exp(-beta * energy_2)
+        spectral_val = 0.0
+        for i in range(ROTOR_DIM):
+            energy_1 = eig_vals[i]
+            state_1 = eig_vecs[:,i]
 
-            mel = 0.0
-            mel = np.dot(np.conj(state_2[1:]), state_1[:-1])
+            boltzmann_1 = np.exp(-beta * energy_1)
 
-            spectral_val += boltzmann_1 * (np.abs(mel)**2) * helpers.d_delta(omega - (energy_2 - energy_1))
+            for j in range(i, ROTOR_DIM):
+                energy_2 = eig_vals[j]
+                state_2 = eig_vecs[:,j]
 
-            if not i == j:
-                spectral_val += boltzmann_2 * (np.abs(mel)**2) * helpers.d_delta(omega - (energy_1 - energy_2))
+                boltzmann_2 = np.exp(-beta * energy_2)
 
-    return spectral_val
+                mel = 0.0
+                mel = np.dot(np.conj(state_2[1:]), state_1[:-1])
+
+                spectral_val += boltzmann_1 * (np.abs(mel)**2) * helpers.d_delta(omega - (energy_2 - energy_1))
+
+                if not i == j:
+                    spectral_val += boltzmann_2 * (np.abs(mel)**2) * helpers.d_delta(omega - (energy_1 - energy_2))
+
+        return spectral_val
+    
+    """
+        Check if rotor spectrum is cached
+    """
+    spectrum = np.array([get_rotor_spectral_val(omega, U, h, K, beta, l_max) for omega in omega_vals])
+    
+    norm = scipy.integrate.trapezoid(spectrum, omega_vals)
+    print(f'rotor norm: {norm}')
+    spectrum_normalized = spectrum / norm
+
+    return spectrum_normalized
 
 
 """
     Check condition on rotor spectral function that it must satisfy to be correct
 """
-def validate_rotor_spectrum(omega_vals, spectral_vals, beta):
+def validate_rotor_spectrum(omega_vals, spectral_vals, beta: float) -> bool:
     dim = len(omega_vals)
 
     for omega_index in range(dim):
@@ -353,33 +376,41 @@ def get_electron_spectral_vals(omega_vals: float, epsilon: float, U: float, t_ef
     domega = np.abs(omega_vals[1] - omega_vals[0])
 
     # Super weird with whether I'm passing scalar or vector values for some parameters. Should clean up soon
-    spinon_vals = np.array([get_spinon_spectral(omega, epsilon[0], t_eff, h[0], mu) for omega in omega_vals])
-    rotor_vals = np.array([get_rotor_spectral(omega, U, h, K, beta, l_max) for omega in omega_vals])
+    spinon_spectrum_vals = spinon_spectrum(omega_vals, epsilon, t_eff, h, mu)
+    rotor_spectrum_vals = rotor_spectrum(omega_vals, U, h, K, beta, l_max)
 
-    fd_vals = np.array([helpers.fermi_dirac(omega, beta) for omega in omega_vals])
-    be_vals = np.array([helpers.bose_einstein(omega, beta) for omega in omega_vals])
-   
-    plt.plot(omega_vals, rotor_vals)
+    plt.plot(omega_vals, spinon_spectrum_vals)
 
     plt.xlabel(r'$\omega$')
-    plt.ylabel(r'$\rho_d(\omega)$', rotation='horizontal')
+    plt.title(r'Spinon')
+
+    plt.tight_layout()
+
+    plt.show()
+
+    plt.plot(omega_vals, rotor_spectrum_vals)
+
+    plt.xlabel(r'$\omega$')
     plt.title(r'Rotor')
 
     plt.tight_layout()
 
     plt.show()
 
+    fd_vals = np.array([helpers.fermi_dirac(omega, beta) for omega in omega_vals])
+    be_vals = np.array([helpers.bose_einstein(omega, beta) for omega in omega_vals])
+   
     # See latex docs for definition of f1, f2, g1, g2
-    f1_vals = spinon_vals * (1 - fd_vals)
-    f2_vals = spinon_vals 
+    f1_vals = spinon_spectrum_vals * (1 - fd_vals)
+    f2_vals = spinon_spectrum_vals 
 
-    g1_vals = rotor_vals
-    g2_vals = rotor_vals * be_vals
+    g1_vals = rotor_spectrum_vals
+    g2_vals = rotor_spectrum_vals * be_vals
 
     spectral_1 = scipy.signal.fftconvolve(f1_vals, g1_vals, mode='same') * domega
     spectral_2 = scipy.signal.fftconvolve(f2_vals, g2_vals, mode='same') * domega
 
-    phys_spectral = spectral_1 + spectral_2
+    phys_spectral = -spectral_1 - spectral_2
 
     return phys_spectral
 
@@ -403,10 +434,11 @@ if __name__ == '__main__':
     Z_guess = np.full(2, 0.5)
     K_guess = np.full(2,-1.0)
 
-    omega_vals = np.linspace(-10, 10, 6000)
+    omega_vals = np.linspace(-10, 10, 20000)
 
     h, Z, K, t_eff, nf, L, mu, num_cycles = update_params(epsilon, t, U, 0.8 * t, h_guess, Z_guess, K_guess, beta, l_max, N_target)
     
+    print(helpers.get_exact_spectrum(U, t, 2))
     if print_params:
         print(f'h: {h}')
         print(f'Z: {Z}')
@@ -418,7 +450,7 @@ if __name__ == '__main__':
         print(f'num_cycles: {num_cycles}\n')
 
     if print_spinon_spectral:
-        spinon_spectral_vals = [get_spinon_spectral(omega, epsilon[0], t_eff, h[0], mu) for omega in omega_vals]
+        spinon_spectral_vals = spinon_spectrum(omega_vals, epsilon, t_eff, h, mu)
 
         plt.plot(omega_vals, spinon_spectral_vals)
         plt.xticks(
@@ -439,7 +471,7 @@ if __name__ == '__main__':
         plt.show()
 
     if print_rotor_spectral:
-        rotor_spectral_vals = [get_rotor_spectral(omega, U, h, K, beta, l_max) for omega in omega_vals]
+        rotor_spectral_vals = rotor_spectrum(omega_vals, U, h, K, beta, l_max)
         print(f'Good spectral function: {validate_rotor_spectrum(omega_vals, rotor_spectral_vals, beta)}')
 
         plt.plot(omega_vals, rotor_spectral_vals)
