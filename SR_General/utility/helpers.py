@@ -51,6 +51,13 @@ def d_delta(x, eta=1e-4):
     return lorentz
 
 """
+    Return vectorized fermi-dirac for all eigenvalues
+"""
+def fermi_dirac_vec(energies, beta):
+    fd = 1.0/(np.exp(beta * energies) + 1.0)
+    return fd
+
+"""
     Fermi-Dirac distribution function
 """
 def fermi_dirac(E, beta, mu=0):
@@ -135,3 +142,13 @@ def get_t_dist(t):
     )
 
     return hopping_dist
+
+def print_params(t_eff, h, mu, Z, K, nf, L, should_print=True):
+    if should_print:
+        print(f'h: {h}')
+        print(f'Z: {Z}')
+        print(f'K: {K}')
+        print(f't_eff: {t_eff}')
+        print(f'nf: {nf}')
+        print(f'L: {L}')
+        print(f'mu: {mu}\n')

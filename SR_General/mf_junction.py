@@ -58,34 +58,15 @@ def get_J_nf(epsilon, t_eff, h, dh, mu, beta, sites):
     return J
 
 def get_L(rotor_eigvals, rotor_eigvecs, beta, l_max):
-    rotor_dim = 2 * l_max + 1
     eigvals = rotor_eigvals - rotor_eigvals[0]
     eigvecs = rotor_eigvecs
 
     bz = np.exp(-beta * eigvals)
 
-    l_vals = np.range(-l_max, l_max+1)
+    l_vals = np.arange(-l_max, l_max+1)
     l_expect_per_state = np.sum((np.abs(eigvecs) ** 2) * l_vals[:,np.newaxis], axis=0)
 
     L = np.dot(bz, l_expect_per_state) / np.sum(bz)
-
-    return L
-
-    for j in range(rotor_dim):
-        energy = eigvals[j]
-        state = eigvecs[:,j]
-
-        # Boltzmann factor
-        bz = np.exp(-beta * energy)
-
-        # Sum over rotor Hilbert space in |l> basis forming the rotor state
-        for idx in range(rotor_dim):
-            l = idx - l_max
-            sum += bz * (np.abs(state[idx]) ** 2) * l
-    
-        partition += bz 
-
-    L = sum / partition
 
     return L
 
@@ -94,7 +75,6 @@ def get_L(rotor_eigvals, rotor_eigvecs, beta, l_max):
 """
 def get_L_vec(rotor_eigvals_vec, rotor_eigvecs_vec, beta, l_max, sites):
     # Dimension of rotor Hilbet space as a function of the cutoff (formally infinite)
-    rotor_dim = 2 * l_max + 1
     L_vec = np.zeros(sites)
 
     # Sum over lattice sites
@@ -114,18 +94,15 @@ def get_L_vec(rotor_eigvals_vec, rotor_eigvecs_vec, beta, l_max, sites):
     for successive iterations
 """
 def get_J_L(U, h, dh, K, beta, l_max, sites):
-    dim = 2 * l_max + 1
     J = np.zeros((sites, sites))
 
     for j in range(sites):
-        dh_vec = np.zeros(sites)
-        dh_vec[j] = dh
+        h_p, h_m = h.copy(), h.copy()
+        h_p[j] += dh/2
+        h_m[j] -= dh/2
 
-        H_p = get_H_rotor(U, h + dh_vec/2, K, l_max, j)
-        H_m = get_H_rotor(U, h - dh_vec/2, K, l_max, j)
-
-        eigvals_p, eigvecs_p = np.linalg.eigh(H_p)
-        eigvals_m, eigvecs_m = np.linalg.eigh(H_m)
+        eigvals_p, eigvecs_p = np.linalg.eigh(get_H_rotor(U, h_p, K, l_max, j))
+        eigvals_m, eigvecs_m = np.linalg.eigh(get_H_rotor(U, h_m, K, l_max, j))
 
         J[j,j] = (get_L(eigvals_p, eigvecs_p, beta, l_max) - get_L(eigvals_m, eigvecs_m, beta, l_max)) / dh
 
@@ -146,58 +123,29 @@ def get_J(epsilon, U, t_eff, h, dh, mu, K, beta, l_max, sites):
 """
 Returns array of Z values for each lattice site
 """
-def get_Z(rotor_site_eigvals, rotor_site_eigvecs, beta, l_max, sites):
+def get_Z(rotor_eigvals_vec, rotor_eigvecs_vec, beta, l_max, sites):
     # Dimension of rotor Hilbet space as a function of the cutoff (formally infinite)
     rotor_dim = 2 * l_max + 1
     Z = np.zeros(sites)
 
-    for i in range (sites):
-        # Picks the list of eigenvalues at a lattice site [...] and subtract the gs energy at that site
-        eigvals = rotor_site_eigvals[i] - rotor_site_eigvals[i,0]        
-        eigvecs = rotor_site_eigvecs[i]
+    for i in range(sites):
+        eigvals = rotor_eigvals_vec[i] - rotor_eigvals_vec[i,0]
+        eigvecs = rotor_eigvecs_vec[i]
 
-        sum, partition = 0.0, 0.0
-        
-        # Sum over rotor states and energies. There are ROTOR_DIM total eigenstates
-        for j in range (rotor_dim):
-            energy = eigvals[j]
-            state = eigvecs[:,j]
+        bz = np.exp(-beta * eigvals)
 
-            bz = np.exp(-beta * energy)
+        mel = (eigvecs[:-1, :].conj() * eigvecs[1:, :]).sum(axis=0)
+        Z[i] = (np.dot(bz, np.real(mel)) / np.sum(bz))**2
 
-            # Sum over rotor Hilbert space in |l> basis forming the rotor state
-            for index in range (rotor_dim):
-                l = index - l_max 
-
-                # Handle truncating the Hilbert space by setting the l_max + 1, -l_max - 1 states to zero
-                if index == 0:
-                    sum += bz * np.conj(state[index]) * state[index + 1]
-                elif index == rotor_dim - 1:
-                    sum += bz * np.conj(state[index]) * state[index - 1]
-                else:
-                    sum += bz * np.conj(state[index]) * (state[index + 1] + state[index - 1])
-                    
-            partition += bz
-
-        sum, partition = np.real(sum), np.real(partition)
-        Z[i] = (sum / (2 * partition))**2
-
-    return Z
+    return Z 
 
 """
     Return effective tunneling amplitude matrix
     t is treated as a vector 
 """
-def get_t_eff(t, Z, sites):
-    t_eff = np.zeros((sites, sites))
-
-    # Fill the upper triangle block
-    for i in range(sites):
-        for j in range(i, sites):
-            t_eff[i,j] = t[i,j] * np.sqrt(Z[i] * Z[j])
-
-    # Use Hermiticity to quickly fill the lower block
-    t_eff = t_eff + t_eff.T.conj() - np.diag(np.diag(t_eff))
+def get_t_eff(t, Z):
+    sqrt_Z = np.sqrt(Z)
+    t_eff = t * np.outer(sqrt_Z, sqrt_Z)
 
     return t_eff
 
@@ -219,12 +167,25 @@ def get_H_rotor(U, h, K, l_max, site_idx):
     return H
 
 """
-Return array of rotor Hamiltonians at each site
+    Return array of rotor Hamiltonians at each site
 """
-def get_H_rotors(U, h, K, l_max, sites):
-    rotor_dim = 2 * l_max + 1
+def get_H_rotor_vec(U, h, K, l_max, sites):
     H_vec = [get_H_rotor(U, h, K, l_max, i) for i in range(sites)]
+
     return H_vec
+
+"""
+    Returns array of rotor Hamiltonian eigenvalues and eigenvectors
+"""
+def get_rotor_eig_vec(U, h, K, l_max, sites):
+    rotor_dim = 2 * l_max + 1
+    eigvals_vec = np.zeros((sites, rotor_dim))
+    eigvecs_vec = np.zeros((sites, rotor_dim, rotor_dim))
+
+    for i in range(sites):
+        eigvals_vec[i], eigvecs_vec[i] = np.linalg.eigh(get_H_rotor(U, h, K, l_max, i))
+
+    return eigvals_vec, eigvecs_vec
 
 """
 Return K
@@ -234,7 +195,7 @@ def get_K(t, Z, spinon_eigvals, spinon_eigvecs, beta, sites):
     weighted = spinon_eigvecs * fd[np.newaxis,:]
     rho = spinon_eigvecs.conj() @ weighted.T
     sqrt_Z = np.sqrt(Z)
-    K = -2 * N_AT * np.sum(t * sqrt_Z[np.newaxis,:] * rho, axis=1)
+    K = np.real(-2 * N_AT * np.sum(t * sqrt_Z[np.newaxis,:] * rho, axis=1))
 
     return K
 
@@ -289,19 +250,19 @@ def spinon_spectrum(omega_vals, epsilon: float, t_eff: float, h: float, mu: floa
 def rotor_spectrum(omega_vals, U: float, h, K, beta: float, l_max: int, overwrite=False):
     def get_rotor_spectral_val(omega: float, U: float, h, K, beta: float, l_max):
         rotor_dim = 2 * l_max + 1
-        H_rotor = get_H_rotors(U, h, K, l_max)[0]
-        eig_vals, eig_vecs = np.linalg.eigh(H_rotor)
+        H_rotor = get_H_rotor_vec(U, h, K, l_max)[0]
+        eigvals, eigvecs = np.linalg.eigh(H_rotor)
     
         spectral_val = 0.0
         for i in range(rotor_dim):
-            energy_1 = eig_vals[i]
-            state_1 = eig_vecs[:,i]
+            energy_1 = eigvals[i]
+            state_1 = eigvecs[:,i]
             print(energy_1)
             bz_1 = np.exp(-beta * energy_1)
 
             for j in range(i, rotor_dim):
-                energy_2 = eig_vals[j]
-                state_2 = eig_vecs[:,j]
+                energy_2 = eigvals[j]
+                state_2 = eigvecs[:,j]
 
                 bz_2 = np.exp(-beta * energy_2)
 
@@ -380,93 +341,101 @@ def get_electron_spectral_vals(omega_vals: float, epsilon: float, U: float, t_ef
     NOTE: Analytic solutions may not be possible due to recursion
 """
 def update_params(epsilon, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l_max, sites, N_target=2.0):
+    # Small parameters to slow down updates
     ALPHA_H = 0.05
     ALPHA_Z = 0.05
     ALPHA_K = 0.05
     ALPHA_T_EFF = 0.05
     ALPHA_MU = 0.01
 
+    # Tolerances for when iteration is done
+    TOL_H = 1e-6
+    TOL_T_EFF = 1e-6
+    TOL_Z = 1e-6
+    TOL_K = 1e-6
+    TOL_N = 1e-4
+
     # Global chemical potential adjusts total particle number; epsilon used for doping differentials!
     mu = 0.0
-
     dh = 1e-4
-    rotor_dim = 2 * l_max + 1
 
     h_update, Z_update, K_update, t_eff_update = h_guess, Z_guess, K_guess, t_eff_guess
 
     did_converge = False
-    num_cycles = 1.0
+    num_cycles = 1
 
     while not did_converge:
         h, Z, K, t_eff = h_update, Z_update, K_update, t_eff_update
 
-        spinon_eigvals, spinon_eigvecs = np.linalg.eigh(get_H_spinon(epsilon, t_eff, h, mu))
-
-        # H_\theta(h)
-        rotor_site_eigenvecs, rotor_site_eigenvals = np.zeros((sites, rotor_dim, rotor_dim)), np.zeros((sites, rotor_dim))
-        H_rotors = get_H_rotors(U, h, K, l_max, sites)
-        for i in range(sites):
-            rotor_site_eigenvals[i], rotor_site_eigenvecs[i] = np.linalg.eigh(H_rotors[i])
+        spinon_eigvals, spinon_eigvecs = np.linalg.eigh(get_H_spinon(epsilon, t_eff, h, mu))        
+        rotor_eigenval_vec, rotor_eigenvec_vec = get_rotor_eig_vec(U, h, K, l_max, sites)
         
-        """
-        Calculate nf, L, and other parameters for next cycle
-        """
+        # Calculate nf, L, and other parameters for next cycle
         nf = get_nf_vec(spinon_eigvals, spinon_eigvecs, beta, sites)
-        L = get_L_vec(rotor_site_eigenvals, rotor_site_eigenvecs, beta, l_max, sites)
+        L = get_L_vec(rotor_eigenval_vec, rotor_eigenvec_vec, beta, l_max, sites)
 
         # Calculate items for Newton's method
         f = nf - L - N_AT / 2.0
         J = get_J(epsilon, U, t_eff, h, dh, mu, K, beta, l_max, sites)
-        
         delta_h = np.linalg.solve(J,f)
-        h_update = h - ALPHA_H * delta_h
 
-        Z_update = (1 - ALPHA_Z) * Z + ALPHA_Z * get_Z(rotor_site_eigenvals, rotor_site_eigenvecs, beta, l_max, sites)
+        # Update parameters
+        h_update = h - ALPHA_H * delta_h
+        Z_update = (1 - ALPHA_Z) * Z + ALPHA_Z * get_Z(rotor_eigenval_vec, rotor_eigenvec_vec, beta, l_max, sites)
         K_update = (1 - ALPHA_K) * K + ALPHA_K * get_K(t, Z_update, spinon_eigvals, spinon_eigvecs, beta, sites)
-        t_eff_update = (1 - ALPHA_T_EFF) * t_eff + ALPHA_T_EFF * get_t_eff(t, Z_update, sites)
+        t_eff_update = (1 - ALPHA_T_EFF) * t_eff + ALPHA_T_EFF * get_t_eff(t, Z_update)
 
         N_total = np.sum(nf)
         mu += ALPHA_MU * (N_target - N_total)
         
-        if (np.abs(h_update - h) < 1e-8).all() and (np.abs(t_eff_update - t_eff) < 1e-6).all() and (np.abs(Z_update - Z) < 1e-6).all() and (np.abs(K_update - K) < 1e-6).all() and (np.abs(N_target - N_total) < 1e-6):
-            did_converge = True
-        else:
-            num_cycles += 1
+        did_converge = (
+            np.allclose(h_update, h, atol=TOL_H) and
+            np.allclose(t_eff_update, t_eff, atol=TOL_T_EFF) and
+            np.allclose(Z_update, Z, atol=TOL_Z) and
+            np.allclose(K_update, K, atol=TOL_K) and
+            abs(N_target - N_total) < TOL_N
+        )
 
-            print(f'h: {h}')
-            print(f'Z: {Z}')
-            print(f'K: {K}')
-            print(f't_eff: {t_eff}')
-            print(f'nf: {nf}')
-            print(f'L: {L}')
-            print(f'mu: {mu}')
+        num_cycles += 1
+        helpers.print_params(t_eff, h, mu, Z, K, nf, L, should_print=False)
 
-    return h_update, Z_update, K_update, t_eff, nf, L, mu, num_cycles
+    # Calculate nf, L with final Hamiltonians
+    spinon_eigvals, spinon_eigvecs = np.linalg.eigh(get_H_spinon(epsilon, t_eff_update, h_update, mu))
+    rotor_eigvals, rotor_eigvecs = get_rotor_eig_vec(U, h_update, K_update, l_max, sites)
+    
+    nf = get_nf_vec(spinon_eigvals, spinon_eigvecs, beta, sites)
+    L = get_L_vec(rotor_eigvals, rotor_eigvecs, beta, l_max, sites)
+    
+    return h_update, Z_update, K_update, t_eff_update, nf, L, mu, num_cycles
 
 if __name__ == '__main__':
-    sites = 50
+    sites = 150
     half_sites = int(sites/2.0)
     l_max = 12
 
     # Add nearest-neighbor hopping
-    t_nn = 1.0
+    t_nn = 1.0; t_nnn = 0.1
     t = np.diag(np.full(sites-1, t_nn), k=1) + np.diag(np.full(sites-1, t_nn), k=-1)
-
+    t += np.diag(np.full(sites-2, t_nnn), k=2) + np.diag(np.full(sites-2, t_nnn), k=-2)
+    
     N_target = sites # Half filling
 
-    U = 1.0
+    U = 1.5
     beta = 50.0
 
-    epsilon = np.concatenate([np.full(half_sites, 0.0), np.full(half_sites, -0.5)])
+    # number of lattice sites chemical potential varies over
+    interface_width = 5.0  
+    site_indices = np.arange(sites)
+    epsilon = -0.25 * np.tanh((site_indices - half_sites) / interface_width) - 0.25
 
     t_eff_guess = 0.5 * t
     h_guess = -epsilon
     Z_guess = np.full(sites, 0.5)
     K_guess = np.full(sites,-1.5)
 
-    h, Z, K, t_eff, nf, L, mu, num_cycles = update_params(epsilon, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l_max, sites, N_target)
+    for U in [0.1,1.0,2.0]:
+        for beta in [50.0,5.0]:
+            h, Z, K, t_eff, nf, L, mu, num_cycles = update_params(epsilon, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l_max, sites, N_target)
 
-    print(f'N: {np.sum(nf)}'
-            )
-    title = f'Electron Occupancy at Half-Filling: ' + r'$U =$ ' + f'{U}, ' + r'$\beta =$ ' + f'{beta}, ' + r'$\mu_L = 0.0$, $\mu_R =$ ' + f'{0.5}'
-    plotting.plot_electron_occupancy(nf, title)
+            title = f'Electron Occupancy at Half-Filling: ' + r'$U =$ ' + f'{U}, ' + r'$\beta =$ ' + f'{beta}, ' + r'$\mu_L = 0.0$, $\mu_R =$ ' + f'{0.5}'
+            plotting.plot_electron_occupancy(nf, title)
