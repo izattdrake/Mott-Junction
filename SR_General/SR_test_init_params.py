@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import json
 
-from SR_junction_sim import *
+from SR_General.mf_junction import *
 
 
 """

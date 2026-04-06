@@ -439,36 +439,36 @@ def update_params(epsilon, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l
     return h_update, Z_update, K_update, t_eff, nf, L, mu, num_cycles
 
 if __name__ == '__main__':
-    sites = 150
+    sites = 120
     half_sites = int(sites/2.0)
     l_max = 12
 
     t = np.zeros((sites, sites))
-    for i in range(sites - 1):
-        for j in range(sites - 1):
-            t[i,j] = 1.0
-            t[i+1,j] = 0.1
-            t[i,j+1] = 0.1
-    t[sites-1, sites-1] = 1.0
-    
+
+    t_nn = 1.0; t_nnn = t_nn / 10.0
+
+    # Add nearest-neighbor hopping
+    t += np.diag(np.full(sites-1, t_nn), k=1) + np.diag(np.full(sites-1, t_nn), k=-1)
+
     N_target = sites # Half filling
 
     U_vals = [0.1, 1.0, 2.0, 3.0]
-    beta_vals = [50.0, 10.0, 5.0]
+    beta_vals = [50.0,5.0]
     epsilon_R_vals = [0.1]
 
-    for U in U_vals:
-        for beta in beta_vals:
-                for epsilon_R in epsilon_R_vals:
-                    epsilon = np.concatenate([np.full(half_sites, 0.0), np.full(half_sites, epsilon_R)])
+    U = 1.0
+    beta = 50.0
 
-                    t_eff_guess = 0.5 * t
-                    h_guess = -epsilon
-                    Z_guess = np.full(sites, 0.5)
-                    K_guess = np.full(sites,-1.5)
+    epsilon = np.concatenate([np.full(half_sites, 0.0), np.full(half_sites, -0.5)])
 
-                    h, Z, K, t_eff, nf, L, mu, num_cycles = update_params(epsilon, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l_max, sites, N_target)
+    t_eff_guess = 0.5 * t
+    h_guess = -epsilon
+    Z_guess = np.full(sites, 0.5)
+    K_guess = np.full(sites,-1.5)
 
-                    title = f'Electron Occupancy at Half-Filling: ' + r'$U =$ ' + f'{U}, ' + r'$\beta =$ ' + f'{beta}, ' + r'$\mu_L = 0.0$, $\mu_R =$ ' + f'{-epsilon_R}'
-                    plotting.plot_electron_occupancy(nf, title)
-                    print('running')
+    h, Z, K, t_eff, nf, L, mu, num_cycles = update_params(epsilon, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l_max, sites, N_target)
+
+    print(f'N: {np.sum(nf)}'
+            )
+    title = f'Electron Occupancy at Half-Filling: ' + r'$U =$ ' + f'{U}, ' + r'$\beta =$ ' + f'{beta}, ' + r'$\mu_L = 0.0$, $\mu_R =$ ' + f'{0.5}'
+    plotting.plot_electron_occupancy(nf, title)
