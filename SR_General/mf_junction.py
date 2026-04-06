@@ -423,7 +423,7 @@ if __name__ == '__main__':
     U = 1.5
     beta = 50.0
 
-    # number of lattice sites chemical potential varies over
+    # parameter to adjust the extent to which the jump varies over
     interface_width = 5.0  
     site_indices = np.arange(sites)
     epsilon = -0.25 * np.tanh((site_indices - half_sites) / interface_width) - 0.25
@@ -433,7 +433,7 @@ if __name__ == '__main__':
     Z_guess = np.full(sites, 0.5)
     K_guess = np.full(sites,-1.5)
 
-    for U in [0.1,1.0,2.0]:
+    for U in [3.0]:
         for beta in [50.0,5.0]:
             h, Z, K, t_eff, nf, L, mu, num_cycles = update_params(epsilon, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l_max, sites, N_target)
 
