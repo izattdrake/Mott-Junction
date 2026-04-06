@@ -317,12 +317,12 @@ def rotor_spectrum(omega_vals, U: float, h, K, beta: float, l_max: int, overwrit
         ROTOR_DIM = 2 * l_max + 1
         H_rotor = get_H_rotors(U, h, K, l_max)[0]
         eig_vals, eig_vecs = np.linalg.eigh(H_rotor)
-
+    
         spectral_val = 0.0
         for i in range(ROTOR_DIM):
             energy_1 = eig_vals[i]
             state_1 = eig_vecs[:,i]
-
+            print(energy_1)
             boltzmann_1 = np.exp(-beta * energy_1)
 
             for j in range(i, ROTOR_DIM):
@@ -423,7 +423,7 @@ if __name__ == '__main__':
     ROTOR_DIM = 2 * l_max + 1
 
     t = 1.0
-    U = 0.5
+    U = -1.0
     beta = 50.0
     N_target = 2.0
 

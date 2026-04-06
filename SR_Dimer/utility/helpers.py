@@ -119,3 +119,19 @@ def get_exact_spectrum(U, t, N):
         raise ValueError('N must be 0,1,2,3,4')
     
     return energies
+
+"""
+    Returns the hopping distance
+    Checks a hopping array and returns the first zero after finite values
+    Tells you how far hopping extends
+    Used for reducing computation by only looping over finite values
+"""
+def get_t_dist(t):
+    seen_nonzero = False
+    hopping_dist = next(
+        (i for i, x in enumerate(t)
+         if (seen_nonzero := seen_nonzero or x != 0) and x == 0),
+         None
+    )
+
+    return hopping_dist
