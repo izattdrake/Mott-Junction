@@ -17,20 +17,18 @@ def plot_electron_occupancy(nf, title_string=None):
     sites = np.arange(N_sites)
 
     # Junction location (halfway)
-    junction = (N_sites - 1) / 2
+    junction = N_sites / 2
 
     plt.figure(figsize=(8, 5))
 
-    # Plot occupancy
     plt.plot(sites, nf, marker='o', linestyle='-', label='Occupancy')
 
     # Draw vertical line at junction
     plt.axvline(x=junction, color='red', linestyle='--', label='Junction')
 
-    # Labels and formatting
     plt.xlabel('Lattice Site')
     plt.ylabel('Electron Occupancy')
-    plt.xticks(sites[::10])  # label all sites
+    plt.xticks(sites[::10])
 
     if title_string:
         plt.title(title_string)

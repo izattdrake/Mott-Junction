@@ -79,12 +79,19 @@ def fermi_dirac(E, beta, mu=0):
 def bose_einstein(E, beta):
     x = beta * E
 
+    """
     if x > 0:
         x_safe = np.maximum(x, 1e-12)
     elif x < 0:
         x_safe = -np.maximum(np.abs(x), 1e-12)
 
     n = 1 / np.expm1(x_safe)
+    """
+
+    if x < 0:
+        n = 1.0 / (np.exp(x) - 1.0 - 1e-10)
+    elif x > 0:
+        n = 1.0 / (np.exp(x) - 1.0 + 1e-10)
 
     return n
 

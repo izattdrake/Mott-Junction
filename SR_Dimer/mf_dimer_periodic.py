@@ -416,8 +416,8 @@ def get_electron_spectral_vals(omega_vals: float, epsilon: float, U: float, t_ef
 
 if __name__ == '__main__':
     print_params = True
-    print_spinon_spectral = False
-    print_rotor_spectral = False
+    print_spinon_spectral = True
+    print_rotor_spectral = True
     print_electron_spectral = True
     l_max = 12
     ROTOR_DIM = 2 * l_max + 1
