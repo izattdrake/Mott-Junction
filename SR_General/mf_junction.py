@@ -37,27 +37,9 @@ def get_nf_vec(spinon_eigvals, spinon_eigvecs, beta, sites):
 
     return nf
 
-
 """
-    Returns matrix contribution dn_i/dh_j to Jacobian in Newton's method
+    Returns L's thermal expectation value
 """
-def get_J_nf(epsilon, t_eff, h, dh, mu, beta, sites):
-    J = np.zeros((sites, sites))
-    for j in range(sites):
-        h_p, h_m = h.copy(), h.copy()
-        h_p[j] += dh/2
-        h_m[j] -= dh/2
-
-        eigvals_p, eigvecs_p = np.linalg.eigh(get_H_spinon(epsilon, t_eff, h_p, mu))
-        eigvals_m, eigvecs_m = np.linalg.eigh(get_H_spinon(epsilon, t_eff, h_m, mu))
-
-        nf_p = get_nf_vec(eigvals_p, eigvecs_p, beta, sites)
-        nf_m = get_nf_vec(eigvals_m, eigvecs_m, beta, sites)
-
-        J[:,j] = (nf_p - nf_m) / dh
-
-    return J
-
 def get_L(rotor_eigvals, rotor_eigvecs, beta, l_max):
     eigvals = rotor_eigvals - rotor_eigvals[0]
     eigvecs = rotor_eigvecs
@@ -87,36 +69,56 @@ def get_L_vec(rotor_eigvals_vec, rotor_eigvecs_vec, beta, l_max, sites):
 
     return L_vec
 
-"""
-    Return L's contribution to Jacobian
-    Off-diagonal derivatives are NOT included
-    It is expected that the spinon sector will take care of those
-    and their contribution will bleed through to the rotor sector
-    for successive iterations
-"""
-def get_J_L(U, h, dh, K, beta, l_max, sites):
-    J = np.zeros((sites, sites))
-
-    for j in range(sites):
-        h_p, h_m = h.copy(), h.copy()
-        h_p[j] += dh/2
-        h_m[j] -= dh/2
-
-        for k in range(sites):
-            eigvals_p, eigvecs_p = np.linalg.eigh(get_H_rotor(U, h_p, K, l_max, k))
-            eigvals_m, eigvecs_m = np.linalg.eigh(get_H_rotor(U, h_m, K, l_max, k))
-
-            L_p = get_L(eigvals_p, eigvecs_p, beta, l_max)
-            L_m = get_L(eigvals_m, eigvecs_m, beta, l_max)
-
-            J[k,j] = (L_p - L_m) / dh
-
-    return J
 
 """
     Return full Jacobian used in Newton's method
 """
 def get_J(epsilon, U, t_eff, h, dh, mu, K, beta, l_max, sites):
+    def get_J_nf(epsilon, t_eff, h, dh, mu, beta, sites):
+        """
+        Returns matrix contribution dn_i/dh_j to Jacobian in Newton's method
+        """
+        J = np.zeros((sites, sites))
+        for j in range(sites):
+            h_p, h_m = h.copy(), h.copy()
+            h_p[j] += dh/2
+            h_m[j] -= dh/2
+
+            eigvals_p, eigvecs_p = np.linalg.eigh(get_H_spinon(epsilon, t_eff, h_p, mu))
+            eigvals_m, eigvecs_m = np.linalg.eigh(get_H_spinon(epsilon, t_eff, h_m, mu))
+
+            nf_p = get_nf_vec(eigvals_p, eigvecs_p, beta, sites)
+            nf_m = get_nf_vec(eigvals_m, eigvecs_m, beta, sites)
+
+            J[:,j] = (nf_p - nf_m) / dh
+
+        return J
+
+    def get_J_L(U, h, dh, K, beta, l_max, sites):
+        """
+            Return L's contribution to Jacobian
+            Off-diagonal derivatives are NOT included
+            It is expected that the spinon sector will take care of those
+            and their contribution will bleed through to the rotor sector
+            for successive iterations
+        """
+        J = np.zeros((sites, sites))
+
+        for j in range(sites):
+            h_p, h_m = h.copy(), h.copy()
+            h_p[j] += dh/2
+            h_m[j] -= dh/2
+
+            eigvals_p, eigvecs_p = np.linalg.eigh(get_H_rotor(U, h_p, K, l_max, j))
+            eigvals_m, eigvecs_m = np.linalg.eigh(get_H_rotor(U, h_m, K, l_max, j))
+
+            L_p = get_L(eigvals_p, eigvecs_p, beta, l_max)
+            L_m = get_L(eigvals_m, eigvecs_m, beta, l_max)
+
+            J[j,j] = (L_p - L_m) / dh
+
+        return J
+
     J_nf = get_J_nf(epsilon, t_eff, h, dh, mu, beta, sites)
     J_L = get_J_L(U, h, dh, K, beta, l_max, sites)
 
@@ -257,7 +259,7 @@ def update_params(epsilon, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l
         # Calculate items for Newton's method
         f = nf - L - N_AT / 2.0
         J = get_J(epsilon, U, t_eff, h, dh, mu, K, beta, l_max, sites)
-        print(J)
+
         try:
             delta_h = np.linalg.solve(J, f)
         except np.linalg.LinAlgError:
@@ -490,20 +492,21 @@ if __name__ == '__main__':
     site_indices = np.arange(sites)
     epsilon = -0.25 * np.tanh((site_indices - half_sites) / interface_width) - 0.25
     
-    #epsilon = np.zeros(sites)
     t_eff_guess = 0.8 * t
     h_guess = -epsilon
     Z_guess = np.full(sites, 0.5)
     K_guess = np.full(sites,-1.0)
 
     omega_vals = np.linspace(-10,10,20000)
-    for U in [0.0, 2.0, 4.0]:
-        for beta in [50.0]:
+    for U in [0.0]:
+        for beta in [1.0]:
             h, Z, K, t_eff, nf, L, mu, num_cycles = update_params(epsilon, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l_max, sites, N_target)
             title = f'Electron Occupancy at Half-Filling: ' + r'$U =$ ' + f'{U}, ' + r'$\beta =$ ' + f'{beta}, ' + r'$\mu_L = 0.0$, $\mu_R =$ ' + f'{0.5}'
-            # here
-            #plotting.plot_electron_occupancy(nf, title)
-
+            plotting.plot_electron_occupancy(nf, title)
+            print(f'U: {U}')
+            print(r'beta' + f': {beta}')
+            print(r'N = 2')
             print(helpers.print_params(t_eff[0,1], h[0], mu, Z[0], K[0], nf[0], L[0]))
-            get_spectra(omega_vals, epsilon, U, t_eff, h, mu, K, beta, l_max, sites, N_target, True, True, True)
+            print('\n')
+            #get_spectra(omega_vals, epsilon, U, t_eff, h, mu, K, beta, l_max, sites, N_target, True, True, True)
             
