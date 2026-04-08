@@ -10,7 +10,7 @@ occupancy : list or array-like
     Electron number occupancy at each lattice site.
     Length defines N_sites.
 """
-def plot_electron_occupancy(nf, title_string=None):
+def plot_electron_occupancy(nf, title_string=None, plot_junction=False) -> None:
     nf = np.array(nf)
     N_sites = len(nf)
 
@@ -23,8 +23,8 @@ def plot_electron_occupancy(nf, title_string=None):
 
     plt.plot(sites, nf, marker='o', linestyle='-', label='Occupancy')
 
-    # Draw vertical line at junction
-    plt.axvline(x=junction, color='red', linestyle='--', label='Junction')
+    if plot_junction:
+        plt.axvline(x=junction, color='red', linestyle='--', label='Junction')
 
     plt.xlabel('Lattice Site')
     plt.ylabel('Electron Occupancy')

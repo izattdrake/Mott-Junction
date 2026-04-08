@@ -224,18 +224,18 @@ def rotor_state_ps(theta, state, l_max):
 """
 def update_params(epsilon, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l_max, sites, N_target=2.0):
     # Small parameters to slow down updates
-    ALPHA_H = 0.04
-    ALPHA_Z = 0.05
-    ALPHA_K = 0.05
-    ALPHA_T_EFF = 0.05
+    ALPHA_H = 0.03
+    ALPHA_Z = 0.03
+    ALPHA_K = 0.03
+    ALPHA_T_EFF = 0.03
     ALPHA_MU = 0.01
 
     # Tolerances for when iteration is done
-    TOL_H = 1e-7
-    TOL_T_EFF = 1e-7
-    TOL_Z = 1e-7
-    TOL_K = 1e-7
-    TOL_N = 1e-4
+    TOL_H = 1e-8
+    TOL_T_EFF = 1e-8
+    TOL_Z = 1e-8
+    TOL_K = 1e-8
+    TOL_N = 1e-6
 
     # Global chemical potential adjusts total particle number; epsilon used for doping differentials!
     mu = 0.0
@@ -276,7 +276,7 @@ def update_params(epsilon, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l
 
         N_total = np.sum(nf)
         mu += ALPHA_MU * (N_target - N_total)
-        
+
         did_converge = (
             np.allclose(h_update, h, atol=TOL_H) and
             np.allclose(t_eff_update, t_eff, atol=TOL_T_EFF) and
@@ -286,7 +286,6 @@ def update_params(epsilon, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l
         )
 
         num_cycles += 1
-        helpers.print_params(t_eff, h, mu, Z, K, nf, L, should_print=False)
 
     # Calculate nf, L with final Hamiltonians
     spinon_eigvals, spinon_eigvecs = np.linalg.eigh(get_H_spinon(epsilon, t_eff_update, h_update, mu))
@@ -336,20 +335,18 @@ def get_spinon_spectrum(omega_vals, epsilon: float, t_eff: float, h: float, mu: 
 
 """
     Return rotor spectrum for a homogenous, translationally invariant system
+    Doesn't work otherwise
 """
 def get_rotor_spectrum(omega_vals, U, h, K, beta, l_max):
     rotor_dim = 2 * l_max + 1
 
-    # Diagonalize rotor Hamiltonian
     eigvals, eigvecs = np.linalg.eigh(get_H_rotor(U, h, K, l_max, 0))
     eigvals -= eigvals[0]
 
-    # Boltzmann weights
     bz = np.exp(-beta * eigvals)
     partition = np.sum(bz)
 
-    # mel[i,j] = <j|e^{i theta}|i>
-    mel_cos = (eigvecs[1:, :].conj().T @ eigvecs[:-1, :] + eigvecs[:-1, :].conj().T @ eigvecs[1:, :]) / 2
+    mel_cos = (eigvecs[1:, :].conj().T @ eigvecs[:-1,:] + eigvecs[:-1, :].conj().T @ eigvecs[1:, :]) / 2
     mel_sq = np.abs(mel_cos) ** 2
 
     # Upper triangle indices (j >= i)
@@ -475,38 +472,53 @@ if __name__ == '__main__':
     plot_rotor_spectral = False
     plot_electron_spectral = True 
 
-    sites = 120
+    sites = 2
     half_sites = int(sites/2.0)
     l_max = 20
 
     # Add nearest-neighbor hopping
     t_nn = 1.0
+    #t_nnn = t_nn/10.0
+
     t = np.diag(np.full(sites-1, t_nn), k=1) + np.diag(np.full(sites-1, t_nn), k=-1)
-    
+    #t += np.diag(np.full(sites-2, t_nnn), k=2) + np.diag(np.full(sites-2, t_nnn), k=-2)
+
     N_target = sites #Half filling
 
-    
+    """
     # parameter to adjust the extent to which the jump varies over
-    
-    interface_width = 5.0  
+    interface_width = 2.5
     site_indices = np.arange(sites)
     epsilon = -0.25 * np.tanh((site_indices - half_sites) / interface_width) - 0.25
-    
+    """
+    epsilon = np.zeros(sites)
     t_eff_guess = 0.8 * t
     h_guess = -epsilon
     Z_guess = np.full(sites, 0.5)
     K_guess = np.full(sites,-1.0)
 
     omega_vals = np.linspace(-10,10,20000)
-    for U in [0.0]:
-        for beta in [1.0]:
-            h, Z, K, t_eff, nf, L, mu, num_cycles = update_params(epsilon, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l_max, sites, N_target)
-            title = f'Electron Occupancy at Half-Filling: ' + r'$U =$ ' + f'{U}, ' + r'$\beta =$ ' + f'{beta}, ' + r'$\mu_L = 0.0$, $\mu_R =$ ' + f'{0.5}'
-            plotting.plot_electron_occupancy(nf, title)
-            print(f'U: {U}')
-            print(r'beta' + f': {beta}')
-            print(r'N = 2')
-            print(helpers.print_params(t_eff[0,1], h[0], mu, Z[0], K[0], nf[0], L[0]))
-            print('\n')
-            #get_spectra(omega_vals, epsilon, U, t_eff, h, mu, K, beta, l_max, sites, N_target, True, True, True)
-            
+
+    U = 0.0
+    beta = 50.0
+
+
+    h, Z, K, t_eff, nf, L, mu, num_cycles = update_params(epsilon, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l_max, sites, N_target)
+
+    print(f'sites: {sites}')
+    print(f'U: {U}')
+    print(r'beta' + f': {beta}')
+    print(f'N = {np.sum(nf)}')
+    print(helpers.print_params(t_eff, h, mu, Z, K, nf, L))
+    print('\n')
+
+    title = f'Electron Occupancy at Half-Filling:' + r'$U =$ ' + f'{U}, ' + r'$\beta =$ ' + f'{beta}, ' + r'$\mu = 0.0$'
+    # plotting.plot_electron_occupancy(nf, title, plot_junction=False)
+
+    rho_f, rho_theta, rho_d = get_spectra(omega_vals, epsilon, U, t_eff, h, mu, K, beta, l_max, sites, N_target, True, True, True)
+
+    """
+    peaks, _ = scipy.signal.find_peaks(rho_f)
+    for peak in peaks:
+        print(f'omega peaks: {omega_vals[peak]}')
+    """
