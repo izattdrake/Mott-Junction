@@ -425,7 +425,7 @@ if __name__ == '__main__':
     t = 1.0
     U = -1.0
     beta = 50.0
-    N_target = 2.0
+    N_target = 3.0
 
     epsilon = np.zeros(2)
 

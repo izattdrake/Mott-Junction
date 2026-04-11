@@ -39,3 +39,21 @@ def plot_electron_occupancy(nf, title_string=None, plot_junction=False) -> None:
     plt.legend()
     plt.tight_layout()
     plt.show()
+
+"""
+    Function that plots rotor ground states
+    Used to study the weights around physical values of |l>
+    and the dropoff towards l_max 
+"""
+def plot_rotor_weight(rotor_state, state_num, epsilon, site, l_max):
+    # Construct l values
+    l_vals = np.arange(-l_max, l_max + 1)
+
+    # Plot
+    plt.figure()
+    plt.plot(l_vals, rotor_state, marker='o')
+    plt.xlabel("l")
+    plt.ylabel("Weight")
+    plt.title(f'Weight of Rotor State {state_num}: site {site}, ' + r'$\epsilon_0 =$ ' + f'{epsilon}, ' + r'$\ell_{max}=$' + f'{l_max}')
+    plt.grid(True)
+    plt.show()

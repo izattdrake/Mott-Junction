@@ -9,6 +9,7 @@ import utility.helpers as helpers
 import utility.plotting as plotting
 
 warnings.simplefilter("error", RuntimeWarning)
+np.set_printoptions(threshold=sys.maxsize)
 
 """
     Simulation of a junction with inhomogenous chemical potential with next-nearest-neighbor hopping
@@ -224,10 +225,10 @@ def rotor_state_ps(theta, state, l_max):
 """
 def update_params(epsilon, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l_max, sites, N_target=2.0):
     # Small parameters to slow down updates
-    ALPHA_H = 0.03
-    ALPHA_Z = 0.03
-    ALPHA_K = 0.03
-    ALPHA_T_EFF = 0.03
+    ALPHA_H = 0.005 
+    ALPHA_Z = 0.01
+    ALPHA_K = 0.01
+    ALPHA_T_EFF = 0.01
     ALPHA_MU = 0.01
 
     # Tolerances for when iteration is done
@@ -263,9 +264,7 @@ def update_params(epsilon, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l
         try:
             delta_h = np.linalg.solve(J, f)
         except np.linalg.LinAlgError:
-            print("Error: singular Jacobian, switching to lstsq")
-            helpers.print_params(t_eff, h, mu, Z, K, nf, L)
-            sys.exit()
+            sys.exit('FAILURE')
             delta_h, *_ = np.linalg.lstsq(J, f, rcond=None)
 
         # Update parameters
@@ -286,7 +285,7 @@ def update_params(epsilon, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l
         )
 
         num_cycles += 1
-
+        # helpers.print_params(t_eff, h, mu, Z, K, nf, L)
     # Calculate nf, L with final Hamiltonians
     spinon_eigvals, spinon_eigvecs = np.linalg.eigh(get_H_spinon(epsilon, t_eff_update, h_update, mu))
     rotor_eigvals, rotor_eigvecs = get_rotor_eig_vec(U, h_update, K_update, l_max, sites)
@@ -393,11 +392,15 @@ def get_spectra(
         plot_spinon_spectrum, plot_rotor_spectrum, plot_electron_spectrum, a=1.0, eta=1e-4
     ):
     domega = np.abs(omega_vals[1] - omega_vals[0])
-
+    
     # Super weird with whether I'm passing scalar or vector values for some parameters. Should clean up soon
     spinon_spectrum_vals = get_spinon_spectrum(omega_vals, epsilon, t_eff, h, mu, sites)
-    rotor_spectrum_vals = get_rotor_spectrum(omega_vals, U, h, K, beta, l_max)
 
+    peaks, _ = scipy.signal.find_peaks(spinon_spectrum_vals)
+    print(f'omega peaks: {[omega_vals[peak] for peak in peaks]}')
+
+    rotor_spectrum_vals = get_rotor_spectrum(omega_vals, U, h, K, beta, l_max)
+    print('after')
     # Validate rotor spectrum 
     print(f'Good spectral function: {validate_rotor_spectrum(omega_vals, rotor_spectrum_vals, beta)}')
 
@@ -474,7 +477,7 @@ if __name__ == '__main__':
 
     sites = 2
     half_sites = int(sites/2.0)
-    l_max = 20
+    l_max = 50
 
     # Add nearest-neighbor hopping
     t_nn = 1.0
@@ -483,17 +486,19 @@ if __name__ == '__main__':
     t = np.diag(np.full(sites-1, t_nn), k=1) + np.diag(np.full(sites-1, t_nn), k=-1)
     #t += np.diag(np.full(sites-2, t_nnn), k=2) + np.diag(np.full(sites-2, t_nnn), k=-2)
 
-    N_target = sites #Half filling
+    N_target = 2.0 #Half filling
 
-    """
+
+    epsilon = np.zeros(sites)
+    epsilon_doped = np.array([0,-1.0])
     # parameter to adjust the extent to which the jump varies over
     interface_width = 2.5
     site_indices = np.arange(sites)
-    epsilon = -0.25 * np.tanh((site_indices - half_sites) / interface_width) - 0.25
-    """
-    epsilon = np.zeros(sites)
+    # epsilon_doped = -0.25 * np.tanh((site_indices - half_sites) / interface_width) - 0.25
+
     t_eff_guess = 0.8 * t
     h_guess = -epsilon
+    h_doped_guess = -epsilon_doped
     Z_guess = np.full(sites, 0.5)
     K_guess = np.full(sites,-1.0)
 
@@ -502,23 +507,44 @@ if __name__ == '__main__':
     U = 0.0
     beta = 50.0
 
-
     h, Z, K, t_eff, nf, L, mu, num_cycles = update_params(epsilon, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l_max, sites, N_target)
 
+    """
     print(f'sites: {sites}')
     print(f'U: {U}')
     print(r'beta' + f': {beta}')
     print(f'N = {np.sum(nf)}')
     print(helpers.print_params(t_eff, h, mu, Z, K, nf, L))
     print('\n')
-
+    """
     title = f'Electron Occupancy at Half-Filling:' + r'$U =$ ' + f'{U}, ' + r'$\beta =$ ' + f'{beta}, ' + r'$\mu = 0.0$'
     # plotting.plot_electron_occupancy(nf, title, plot_junction=False)
 
-    rho_f, rho_theta, rho_d = get_spectra(omega_vals, epsilon, U, t_eff, h, mu, K, beta, l_max, sites, N_target, True, True, True)
+    H_rotor_vec_nodope = get_H_rotor_vec(U, h, K, l_max, sites)
 
-    """
-    peaks, _ = scipy.signal.find_peaks(rho_f)
-    for peak in peaks:
-        print(f'omega peaks: {omega_vals[peak]}')
-    """
+    h, Z, K, t_eff, nf, L, mu, num_cycles = update_params(epsilon_doped, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l_max, sites, N_target)
+    H_rotor_vec_dope = get_H_rotor_vec(U, h, K, l_max, sites)
+
+    eigvals_nodope, eigvecs_nodope = np.linalg.eigh(H_rotor_vec_nodope[0])
+    eigvals_dope, eigvecs_dope = np.linalg.eigh(H_rotor_vec_dope[0])
+
+    # print(f'Undoped eigenvals: {eigvals_nodope}')
+    # print(f'Doped eigvals: {eigvals_dope}')
+    # print(f'Difference eigvals: {np.abs(eigvals_nodope - eigvals_dope)}')
+    l_vals = np.arange(-l_max, l_max + 1)
+
+    for i in range(2*l_max + 1):
+        # Plot
+        plt.figure()
+        plt.plot(l_vals, np.abs(eigvecs_nodope[i]), marker='o', label='Not Doped', alpha=0.7)
+        plt.plot(l_vals, np.abs(eigvecs_dope[i]), marker='o', label='Doped', alpha=0.7)
+        plt.legend(loc='upper right')
+
+        plt.xlabel("l")
+        plt.ylabel("Weight")
+        plt.title(f'Weight of Rotor State {i}: site {0}, ' + r'$U=$' + f'{U}, ' + r'$\mu = $ ' + f'{[0.0,0.5]}, ' + r'$\ell_{max}=$' + f'{l_max}')
+        plt.grid(True)
+        plt.show()
+
+    # print(H_rotor_vec_dope[1] == H_rotor_vec_dope[1])
+    # rho_f, rho_theta, rho_d = get_spectra(omega_vals, epsilon, U, t_eff, h, mu, K, beta, l_max, sites, N_target, False, False, False)    
