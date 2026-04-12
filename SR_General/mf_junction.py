@@ -4,6 +4,7 @@ import time
 import warnings
 import sys 
 import scipy 
+import math
 
 import utility.helpers as helpers
 import utility.plotting as plotting
@@ -285,7 +286,8 @@ def update_params(epsilon, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l
         )
 
         num_cycles += 1
-        # helpers.print_params(t_eff, h, mu, Z, K, nf, L)
+        helpers.print_params(t_eff, h, mu, Z, K, nf, L, should_print=False)
+
     # Calculate nf, L with final Hamiltonians
     spinon_eigvals, spinon_eigvecs = np.linalg.eigh(get_H_spinon(epsilon, t_eff_update, h_update, mu))
     rotor_eigvals, rotor_eigvecs = get_rotor_eig_vec(U, h_update, K_update, l_max, sites)
@@ -477,30 +479,33 @@ if __name__ == '__main__':
 
     sites = 2
     half_sites = int(sites/2.0)
+    N_target = sites #Half filling
+
     l_max = 50
+    l_vals = np.arange(-l_max, l_max + 1)
 
     # Add nearest-neighbor hopping
-    t_nn = 1.0
-    #t_nnn = t_nn/10.0
+    t_nn = 1.0; t_nnn = t_nn/10.0
 
     t = np.diag(np.full(sites-1, t_nn), k=1) + np.diag(np.full(sites-1, t_nn), k=-1)
-    #t += np.diag(np.full(sites-2, t_nnn), k=2) + np.diag(np.full(sites-2, t_nnn), k=-2)
-
-    N_target = 2.0 #Half filling
+    t += np.diag(np.full(sites-2, t_nnn), k=2) + np.diag(np.full(sites-2, t_nnn), k=-2)
 
 
     epsilon = np.zeros(sites)
-    epsilon_doped = np.array([0,-1.0])
     # parameter to adjust the extent to which the jump varies over
     interface_width = 2.5
     site_indices = np.arange(sites)
     # epsilon_doped = -0.25 * np.tanh((site_indices - half_sites) / interface_width) - 0.25
+    epsilon_doped = np.array([0.0, -1.0])
 
+    """
+        Initial parameter guesses for iterative Newton's method
+    """
     t_eff_guess = 0.8 * t
     h_guess = -epsilon
     h_doped_guess = -epsilon_doped
     Z_guess = np.full(sites, 0.5)
-    K_guess = np.full(sites,-1.0)
+    K_guess = np.full(sites,-1.5)
 
     omega_vals = np.linspace(-10,10,20000)
 
@@ -508,43 +513,53 @@ if __name__ == '__main__':
     beta = 50.0
 
     h, Z, K, t_eff, nf, L, mu, num_cycles = update_params(epsilon, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l_max, sites, N_target)
-
-    """
-    print(f'sites: {sites}')
-    print(f'U: {U}')
-    print(r'beta' + f': {beta}')
-    print(f'N = {np.sum(nf)}')
-    print(helpers.print_params(t_eff, h, mu, Z, K, nf, L))
-    print('\n')
-    """
-    title = f'Electron Occupancy at Half-Filling:' + r'$U =$ ' + f'{U}, ' + r'$\beta =$ ' + f'{beta}, ' + r'$\mu = 0.0$'
-    # plotting.plot_electron_occupancy(nf, title, plot_junction=False)
-
     H_rotor_vec_nodope = get_H_rotor_vec(U, h, K, l_max, sites)
 
+    
+    #title = f'Electron Occupancy at Half-Filling:' + r'$U =$ ' + f'{U}, ' + r'$\beta =$ ' + f'{beta}, ' + r'$\mu = 0.0$'
+    #plotting.plot_electron_occupancy(nf, title, plot_junction=False)
+
     h, Z, K, t_eff, nf, L, mu, num_cycles = update_params(epsilon_doped, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l_max, sites, N_target)
+    #plotting.plot_electron_occupancy(nf, title, plot_junction=False)
     H_rotor_vec_dope = get_H_rotor_vec(U, h, K, l_max, sites)
 
     eigvals_nodope, eigvecs_nodope = np.linalg.eigh(H_rotor_vec_nodope[0])
-    eigvals_dope, eigvecs_dope = np.linalg.eigh(H_rotor_vec_dope[0])
+    eigvals_dope_0, eigvecs_dope_0 = np.linalg.eigh(H_rotor_vec_dope[0])
+    eigvals_dope_1, eigvecs_dope_1 = np.linalg.eigh(H_rotor_vec_dope[1])
 
-    # print(f'Undoped eigenvals: {eigvals_nodope}')
-    # print(f'Doped eigvals: {eigvals_dope}')
-    # print(f'Difference eigvals: {np.abs(eigvals_nodope - eigvals_dope)}')
-    l_vals = np.arange(-l_max, l_max + 1)
+    print(np.all(eigvals_dope_0 - eigvals_dope_1 < 1e-15))
+    """
+        Plot eigenvalues
+    """
+    plt.figure()
+    # plt.plot(l_vals, eigvals_nodope, marker='o', label='Undoped', alpha=0.65)
+    plt.plot(l_vals, eigvals_dope_0, marker='o', label='Doped Site 0', alpha=0.65)
+    plt.plot(l_vals, eigvals_dope_1, marker='o', label='Doped Site 1', alpha=0.65)
 
+    plt.legend(loc='upper right')
+    plt.xlabel(r'$\ell$')
+    plt.ylabel('Eigenvalues')
+    plt.title(f'Dimer Rotor Eigenvalues with ' + r'$\ell=$' + f'{l_max}, ' + r'$\mu = [0.0,1.0]$')
+    plt.show()
+
+    """
+        Plot eigenvectors
+    """
     for i in range(2*l_max + 1):
         # Plot
         plt.figure()
-        plt.plot(l_vals, np.abs(eigvecs_nodope[i]), marker='o', label='Not Doped', alpha=0.7)
-        plt.plot(l_vals, np.abs(eigvecs_dope[i]), marker='o', label='Doped', alpha=0.7)
+        plt.plot(l_vals, np.abs(eigvecs_nodope[i]), marker='o', label='Undoped', alpha=0.65)
+        plt.plot(l_vals, np.abs(eigvecs_dope_0[i]), marker='o', label='Doped Site 0', alpha=0.65)
+        plt.plot(l_vals, np.abs(eigvecs_dope_1[i]), marker='o', label='Doped Site 1', alpha=0.65)
+
         plt.legend(loc='upper right')
 
-        plt.xlabel("l")
+        plt.xlabel(r'$\ell$')
         plt.ylabel("Weight")
-        plt.title(f'Weight of Rotor State {i}: site {0}, ' + r'$U=$' + f'{U}, ' + r'$\mu = $ ' + f'{[0.0,0.5]}, ' + r'$\ell_{max}=$' + f'{l_max}')
+        plt.title(f'Weight of Rotor State {i}, ' + r'$U=$' + f'{U}, ' + r'$\mu = $ ' + f'{[0.0,1.0]}, ' + r'$\ell_{max}=$' + f'{l_max}')
         plt.grid(True)
         plt.show()
+    
 
     # print(H_rotor_vec_dope[1] == H_rotor_vec_dope[1])
     # rho_f, rho_theta, rho_d = get_spectra(omega_vals, epsilon, U, t_eff, h, mu, K, beta, l_max, sites, N_target, False, False, False)    
