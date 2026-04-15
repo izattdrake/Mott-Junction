@@ -152,7 +152,6 @@ def get_Z(rotor_eigvals_vec, rotor_eigvecs_vec, beta, l_max, sites):
 def get_t_eff(t, Z):
     sqrt_Z = np.sqrt(Z)
     t_eff = t * np.outer(sqrt_Z, sqrt_Z)
-
     return t_eff
 
 """
@@ -177,7 +176,6 @@ def get_H_rotor(U, h, K, l_max, site_idx):
 """
 def get_H_rotor_vec(U, h, K, l_max, sites):
     H_vec = [get_H_rotor(U, h, K, l_max, i) for i in range(sites)]
-
     return H_vec
 
 """
@@ -224,7 +222,7 @@ def rotor_state_ps(theta, state, l_max):
     TODO: Find a closed form analytic solution using perturbation theory
     NOTE: Analytic solutions may not be possible due to recursion
 """
-def update_params(epsilon, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l_max, sites, N_target=2.0):
+def update_params(epsilon, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l_max, sites, N_target=2.0, PBC=False):
     # Small parameters to slow down updates
     ALPHA_H = 0.005 
     ALPHA_Z = 0.01
@@ -241,7 +239,7 @@ def update_params(epsilon, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l
 
     # Global chemical potential adjusts total particle number; epsilon used for doping differentials!
     mu = 0.0
-    dh = 1e-4
+    dh = 1e-5
 
     h_update, Z_update, K_update, t_eff_update = h_guess, Z_guess, K_guess, t_eff_guess
 
@@ -311,100 +309,76 @@ def spinon_Green(omega: float, k: float, epsilon: float, t_eff: float, h: float,
 """
 def get_spinon_spectrum(omega_vals, epsilon: float, t_eff: float, h: float, mu: float, sites: int):
     def get_spectral_val(omega: float, epsilon: float, t_eff: float, h: float, mu: float, sites: int, a=1.0, eta=1e-4):
-        epsilon_val = epsilon[0]
-        h_val = h[0]
+        epsilon_val, h_val = epsilon[0], h[0]
         
         # hack this for larger periodic systems 
         t_eff_nn = t_eff[0,1]
-        
+        t_eff_nnn = t_eff[0,2]
+
         spectral_val = 0.0
 
         # Assume translational symmetry, sum over k = 0, pi/a
         for n in range(sites):
             k = (2*np.pi * n/(sites * a))
-            energy_k = -2 * t_eff_nn * np.cos(k * a) + (epsilon_val - mu - h_val)
+            energy_k = epsilon_val - mu - h_val - 2 * t_eff_nn * np.cos(k * a) - 2 * t_eff_nnn * np.cos(2 * k * a) 
             spectral_val += helpers.d_delta(omega - energy_k)
 
         return spectral_val
 
     spectrum = np.array([get_spectral_val(omega, epsilon, t_eff, h, mu, sites) for omega in omega_vals])
-    norm = scipy.integrate.trapezoid(spectrum, omega_vals)
-    spectrum_normalized = spectrum / norm
+    spectrum_norm = spectrum / scipy.integrate.trapezoid(spectrum, omega_vals)
 
-    return spectrum_normalized
+    return spectrum_norm
 
+def get_rotor_spectrum(omega_vals, U: float, h, K, beta: float, l_max: int, overwrite=False):
+    H_rotor = get_H_rotor(U, h, K, l_max, 0)
+    eig_vals, eig_vecs = np.linalg.eigh(H_rotor)
 
-"""
-    Return rotor spectrum for a homogenous, translationally invariant system
-    Doesn't work otherwise
-"""
-def get_rotor_spectrum(omega_vals, U, h, K, beta, l_max):
-    rotor_dim = 2 * l_max + 1
+    bz = np.exp(-beta * eig_vals)          
+    partition = bz.sum()
 
-    eigvals, eigvecs = np.linalg.eigh(get_H_rotor(U, h, K, l_max, 0))
-    eigvals -= eigvals[0]
+    mel = np.conj(eig_vecs[1:, :]).T @ eig_vecs[:-1, :]   
+    mel = mel.T                                             
 
-    bz = np.exp(-beta * eigvals)
-    partition = np.sum(bz)
+    bz_diff = bz[:, None] - bz[None, :]                  
+    weights = bz_diff * np.abs(mel) ** 2                   
 
-    mel_cos = (eigvecs[1:, :].conj().T @ eigvecs[:-1,:] + eigvecs[:-1, :].conj().T @ eigvecs[1:, :]) / 2
-    mel_sq = np.abs(mel_cos) ** 2
+    energy_diff = eig_vals[:, None] - eig_vals[None, :]    
 
-    # Upper triangle indices (j >= i)
-    i_idx, j_idx = np.triu_indices(rotor_dim, k=0)
-    off_diag = i_idx != j_idx
+    args = omega_vals[:, None, None] + energy_diff[None, :, :] 
+    delta_vals = helpers.d_delta(args)                          
 
-    mel_sq_ut = mel_sq[i_idx, j_idx]
-    delta_E_ut = eigvals[j_idx] - eigvals[i_idx]
+    spectrum = np.einsum('ij,kij->k', weights, delta_vals) / partition
 
-    # Term 1: all pairs, delta(omega - (E_j - E_i))
-    d1 = helpers.d_delta(omega_vals[:, np.newaxis] - delta_E_ut[np.newaxis, :])
-    term1 = (bz[i_idx] * mel_sq_ut) @ d1.T
-
-    # Term 2: off-diagonal pairs only, delta(omega + (E_j - E_i))
-    d2 = helpers.d_delta(omega_vals[:, np.newaxis] + delta_E_ut[np.newaxis, off_diag])
-    term2 = (bz[j_idx[off_diag]] * mel_sq_ut[off_diag]) @ d2.T
-
-    spectrum = (term1 + term2) / partition
     spectrum /= scipy.integrate.trapezoid(spectrum, omega_vals)
-
     return spectrum
-
-"""
-    Check condition on rotor spectral function that it must satisfy to be correct
-"""
-def validate_rotor_spectrum(omega_vals, spectrum_vals, beta: float) -> bool:
-    dim = len(omega_vals)
-
-    for omega_idx in range(dim):
-        omega = omega_vals[omega_idx]
-        m_omega_idx = np.argmin(np.abs(omega_vals + omega))
-
-        if not np.isclose(
-            np.exp(beta * omega) * spectrum_vals[m_omega_idx],
-            spectrum_vals[omega_idx],
-            atol=1e-8
-        ): return False
-    
-    return True 
 
 # Returns the spinon, rotor, and electron spectral functions for all values of omega using Scipy's FFT convolution method
 def get_spectra(
         omega_vals: float, epsilon: float, U: float, t_eff: float, h: float, mu: float, K, beta, l_max, sites, N_target,
         plot_spinon_spectrum, plot_rotor_spectrum, plot_electron_spectrum, a=1.0, eta=1e-4
     ):
+    domain_dim = len(omega_vals)
+    half_domain = int(len(omega_vals)/2.0)
     domega = np.abs(omega_vals[1] - omega_vals[0])
     
     # Super weird with whether I'm passing scalar or vector values for some parameters. Should clean up soon
     spinon_spectrum_vals = get_spinon_spectrum(omega_vals, epsilon, t_eff, h, mu, sites)
+    print(f'Spinon spectrum integral: {scipy.integrate.trapezoid(spinon_spectrum_vals, omega_vals)}')
 
     peaks, _ = scipy.signal.find_peaks(spinon_spectrum_vals)
     print(f'omega peaks: {[omega_vals[peak] for peak in peaks]}')
+ 
+    rotor_spectrum_vals =  get_rotor_spectrum(omega_vals, U, h, K, beta, l_max)
+    print(f'Rotor spectrum integral: {scipy.integrate.trapezoid(rotor_spectrum_vals, omega_vals)}')
 
-    rotor_spectrum_vals = get_rotor_spectrum(omega_vals, U, h, K, beta, l_max)
-    print('after')
-    # Validate rotor spectrum 
-    print(f'Good spectral function: {validate_rotor_spectrum(omega_vals, rotor_spectrum_vals, beta)}')
+    """
+    Manually play with rotors spectrum
+
+    rotor_spectrum_vals = np.zeros(len(omega_vals))
+    rotor_spectrum_vals[half_domain] = 500
+    rotor_spectrum_vals[half_domain - 1] = 1000
+    """
 
     if plot_spinon_spectrum:
         plt.plot(omega_vals, spinon_spectrum_vals)
@@ -451,9 +425,8 @@ def get_spectra(
         mode='same'
     ) * domega
 
-    phys_spectrum_vals = spectral_1 + spectral_fd + spectral_be
-
-    print(f'Max rotor index: {np.argmax(rotor_spectrum_vals)}')
+    phys_spectrum_vals_unnorm = (-spectral_1 - spectral_fd - spectral_be) 
+    phys_spectrum_vals = phys_spectrum_vals_unnorm / scipy.integrate.trapezoid(phys_spectrum_vals_unnorm, omega_vals)
 
     if plot_electron_spectrum:
         plt.plot(omega_vals, phys_spectrum_vals)
@@ -473,15 +446,16 @@ def get_spectra(
     return spinon_spectrum_vals, rotor_spectrum_vals, phys_spectrum_vals
 
 if __name__ == '__main__':
+    PBC = True
     plot_spinon_spectral = True
     plot_rotor_spectral = False
     plot_electron_spectral = True 
 
-    sites = 2
+    sites = 100
     half_sites = int(sites/2.0)
     N_target = sites #Half filling
 
-    l_max = 50
+    l_max = 20
     l_vals = np.arange(-l_max, l_max + 1)
 
     # Add nearest-neighbor hopping
@@ -489,7 +463,10 @@ if __name__ == '__main__':
 
     t = np.diag(np.full(sites-1, t_nn), k=1) + np.diag(np.full(sites-1, t_nn), k=-1)
     t += np.diag(np.full(sites-2, t_nnn), k=2) + np.diag(np.full(sites-2, t_nnn), k=-2)
-
+    
+    if PBC:
+        t[0, -1], t[-1, 0] = t_nn, t_nn
+        t[0, -2], t[-2, 0], t[1, -1], t[-1, 1] = t_nnn, t_nnn, t_nnn, t_nnn
 
     epsilon = np.zeros(sites)
     # parameter to adjust the extent to which the jump varies over
@@ -515,10 +492,14 @@ if __name__ == '__main__':
     h, Z, K, t_eff, nf, L, mu, num_cycles = update_params(epsilon, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l_max, sites, N_target)
     H_rotor_vec_nodope = get_H_rotor_vec(U, h, K, l_max, sites)
 
-    
-    #title = f'Electron Occupancy at Half-Filling:' + r'$U =$ ' + f'{U}, ' + r'$\beta =$ ' + f'{beta}, ' + r'$\mu = 0.0$'
-    #plotting.plot_electron_occupancy(nf, title, plot_junction=False)
+    title = f'Electron Occupancy at Half-Filling:' + r'$U =$ ' + f'{U}, ' + r'$\beta =$ ' + f'{beta}, ' + r'$\mu = 0.0$'
+    plotting.plot_electron_occupancy(nf, title, plot_junction=False)
 
+    print(f'before spectrum calculation')
+    rho_f, rho_theta, rho_d = get_spectra(omega_vals, epsilon, U, t_eff, h, mu, K, beta, l_max, sites, N_target, True, True, True)    
+
+    """
+    Doping calculation
     h, Z, K, t_eff, nf, L, mu, num_cycles = update_params(epsilon_doped, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l_max, sites, N_target)
     #plotting.plot_electron_occupancy(nf, title, plot_junction=False)
     H_rotor_vec_dope = get_H_rotor_vec(U, h, K, l_max, sites)
@@ -526,13 +507,13 @@ if __name__ == '__main__':
     eigvals_nodope, eigvecs_nodope = np.linalg.eigh(H_rotor_vec_nodope[0])
     eigvals_dope_0, eigvecs_dope_0 = np.linalg.eigh(H_rotor_vec_dope[0])
     eigvals_dope_1, eigvecs_dope_1 = np.linalg.eigh(H_rotor_vec_dope[1])
+    """
 
-    print(np.all(eigvals_dope_0 - eigvals_dope_1 < 1e-15))
     """
-        Plot eigenvalues
-    """
+    Plot eigenvalues
+    
     plt.figure()
-    # plt.plot(l_vals, eigvals_nodope, marker='o', label='Undoped', alpha=0.65)
+    plt.plot(l_vals, eigvals_nodope, marker='o', label='Undoped', alpha=0.65)
     plt.plot(l_vals, eigvals_dope_0, marker='o', label='Doped Site 0', alpha=0.65)
     plt.plot(l_vals, eigvals_dope_1, marker='o', label='Doped Site 1', alpha=0.65)
 
@@ -541,11 +522,10 @@ if __name__ == '__main__':
     plt.ylabel('Eigenvalues')
     plt.title(f'Dimer Rotor Eigenvalues with ' + r'$\ell=$' + f'{l_max}, ' + r'$\mu = [0.0,1.0]$')
     plt.show()
-
+    """
     """
         Plot eigenvectors
-    """
-    for i in range(2*l_max + 1):
+    for i in range(100,101):
         # Plot
         plt.figure()
         plt.plot(l_vals, np.abs(eigvecs_nodope[i]), marker='o', label='Undoped', alpha=0.65)
@@ -556,10 +536,7 @@ if __name__ == '__main__':
 
         plt.xlabel(r'$\ell$')
         plt.ylabel("Weight")
-        plt.title(f'Weight of Rotor State {i}, ' + r'$U=$' + f'{U}, ' + r'$\mu = $ ' + f'{[0.0,1.0]}, ' + r'$\ell_{max}=$' + f'{l_max}')
+        plt.title(f'Weight of Rotor State {i}, ' + r'$U=$' + f'{U}, ' + r'$\beta=$' + f'{beta}, ' + r'$\mu = $ ' + f'{[0.0,1.0]}, ' + r'$\ell_{max}=$' + f'{l_max}')
         plt.grid(True)
         plt.show()
-    
-
-    # print(H_rotor_vec_dope[1] == H_rotor_vec_dope[1])
-    # rho_f, rho_theta, rho_d = get_spectra(omega_vals, epsilon, U, t_eff, h, mu, K, beta, l_max, sites, N_target, False, False, False)    
+    """

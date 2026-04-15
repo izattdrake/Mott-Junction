@@ -150,6 +150,15 @@ def get_t_dist(t):
 
     return hopping_dist
 
+"""
+    Returns physical specturm peaks
+    For some reason, whether or not the spectrum is entirely >0 or <0 
+    depends on l_max. I'm assuming the peak's locations at \omega are still accurate
+    so that it doesn't matter whether everything's down or up
+"""
+def get_spectrum_peaks(spectrum_vals):
+    return 
+
 def print_params(t_eff, h, mu, Z, K, nf, L, should_print=True):
     if should_print:
         print(f'h: {h}')
@@ -159,3 +168,4 @@ def print_params(t_eff, h, mu, Z, K, nf, L, should_print=True):
         print(f'nf: {nf}')
         print(f'L: {L}')
         print(f'mu: {mu}\n')
+

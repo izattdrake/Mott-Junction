@@ -51,6 +51,13 @@ def d_delta(x, eta=1e-4):
     return lorentz
 
 """
+    Return vectorized fermi-dirac for all eigenvalues
+"""
+def fermi_dirac_vec(energies, beta):
+    fd = 1.0/(np.exp(beta * energies) + 1.0)
+    return fd
+
+"""
     Fermi-Dirac distribution function
 """
 def fermi_dirac(E, beta, mu=0):
@@ -72,12 +79,19 @@ def fermi_dirac(E, beta, mu=0):
 def bose_einstein(E, beta):
     x = beta * E
 
+    """
     if x > 0:
         x_safe = np.maximum(x, 1e-12)
     elif x < 0:
         x_safe = -np.maximum(np.abs(x), 1e-12)
 
     n = 1 / np.expm1(x_safe)
+    """
+
+    if x < 0:
+        n = 1.0 / (np.exp(x) - 1.0 - 1e-10)
+    elif x > 0:
+        n = 1.0 / (np.exp(x) - 1.0 + 1e-10)
 
     return n
 
@@ -135,3 +149,23 @@ def get_t_dist(t):
     )
 
     return hopping_dist
+
+"""
+    Returns physical specturm peaks
+    For some reason, whether or not the spectrum is entirely >0 or <0 
+    depends on l_max. I'm assuming the peak's locations at \omega are still accurate
+    so that it doesn't matter whether everything's down or up
+"""
+def get_spectrum_peaks(spectrum_vals):
+    return 
+
+def print_params(t_eff, h, mu, Z, K, nf, L, should_print=True):
+    if should_print:
+        print(f'h: {h}')
+        print(f'Z: {Z}')
+        print(f'K: {K}')
+        print(f't_eff: {t_eff}')
+        print(f'nf: {nf}')
+        print(f'L: {L}')
+        print(f'mu: {mu}\n')
+
