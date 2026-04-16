@@ -284,7 +284,7 @@ def update_params(epsilon, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l
         )
 
         num_cycles += 1
-        helpers.print_params(t_eff, h, mu, Z, K, nf, L, should_print=False)
+        helpers.print_params(t_eff, h, mu, Z, K, nf, L, should_print=True)
 
     # Calculate nf, L with final Hamiltonians
     spinon_eigvals, spinon_eigvecs = np.linalg.eigh(get_H_spinon(epsilon, t_eff_update, h_update, mu))
@@ -313,26 +313,60 @@ def get_spinon_spectrum(omega_vals, epsilon: float, t_eff: float, h: float, mu: 
         
         # hack this for larger periodic systems 
         t_eff_nn = t_eff[0,1]
-        t_eff_nnn = t_eff[0,2]
-
+                    
         spectral_val = 0.0
 
         # Assume translational symmetry, sum over k = 0, pi/a
         for n in range(sites):
             k = (2*np.pi * n/(sites * a))
-            energy_k = epsilon_val - mu - h_val - 2 * t_eff_nn * np.cos(k * a) - 2 * t_eff_nnn * np.cos(2 * k * a) 
+            energy_k = epsilon_val - mu - h_val - 2 * t_eff_nn * np.cos(k * a) 
             spectral_val += helpers.d_delta(omega - energy_k)
 
         return spectral_val
 
-    spectrum = np.array([get_spectral_val(omega, epsilon, t_eff, h, mu, sites) for omega in omega_vals])
-    spectrum_norm = spectrum / scipy.integrate.trapezoid(spectrum, omega_vals)
+    spectrum_norm = np.array([get_spectral_val(omega, epsilon, t_eff, h, mu, sites) for omega in omega_vals]) / sites
 
     return spectrum_norm
+
+"""
+def get_rotor_spectrum(omega_vals, U: float, h, K, beta: float, l_max: int, overwrite=False):
+    def get_rotor_spectral_val(omega: float, U: float, h, K, beta: float, l_max):
+        rotor_dim = 2 * l_max + 1
+        H_rotor = get_H_rotor(U, h, K, l_max,0)
+        eig_vals, eig_vecs = np.linalg.eigh(H_rotor)
+    
+        spectral_val = 0.0
+        for i in range(rotor_dim):
+            energy_1 = eig_vals[i]
+            state_1 = eig_vecs[:,i]
+            bz_1 = np.exp(-beta * energy_1)
+
+            for j in range(rotor_dim):
+                energy_2 = eig_vals[j]
+                state_2 = eig_vecs[:,j]
+
+                bz_2 = np.exp(-beta * energy_2)
+
+                mel = 0.0
+                mel = np.dot(np.conj(state_2[1:]), state_1[:-1])
+
+                spectral_val += (np.abs(mel)**2) * (bz_1 - bz_2) * helpers.d_delta(omega + (energy_1 - energy_2))
+
+        return spectral_val
+    
+    spectrum = np.array([get_rotor_spectral_val(omega, U, h, K, beta, l_max) for omega in omega_vals])
+    
+    norm = scipy.integrate.trapezoid(spectrum, omega_vals)
+    spectrum_normalized = spectrum / norm
+
+    return spectrum_normalized
+"""
 
 def get_rotor_spectrum(omega_vals, U: float, h, K, beta: float, l_max: int, overwrite=False):
     H_rotor = get_H_rotor(U, h, K, l_max, 0)
     eig_vals, eig_vecs = np.linalg.eigh(H_rotor)
+
+    eig_vals = eig_vals - eig_vals[0]
 
     bz = np.exp(-beta * eig_vals)          
     partition = bz.sum()
@@ -350,7 +384,7 @@ def get_rotor_spectrum(omega_vals, U: float, h, K, beta: float, l_max: int, over
 
     spectrum = np.einsum('ij,kij->k', weights, delta_vals) / partition
 
-    spectrum /= scipy.integrate.trapezoid(spectrum, omega_vals)
+    # spectrum /= scipy.integrate.trapezoid(spectrum, omega_vals)
     return spectrum
 
 # Returns the spinon, rotor, and electron spectral functions for all values of omega using Scipy's FFT convolution method
@@ -370,6 +404,8 @@ def get_spectra(
     print(f'omega peaks: {[omega_vals[peak] for peak in peaks]}')
  
     rotor_spectrum_vals =  get_rotor_spectrum(omega_vals, U, h, K, beta, l_max)
+    print(f'Some rotor vals: {rotor_spectrum_vals[9990:10010]}')
+
     print(f'Rotor spectrum integral: {scipy.integrate.trapezoid(rotor_spectrum_vals, omega_vals)}')
 
     """
@@ -451,23 +487,24 @@ if __name__ == '__main__':
     plot_rotor_spectral = False
     plot_electron_spectral = True 
 
-    sites = 100
+    sites = 2
     half_sites = int(sites/2.0)
     N_target = sites #Half filling
 
-    l_max = 20
+    l_max = 50
     l_vals = np.arange(-l_max, l_max + 1)
 
     # Add nearest-neighbor hopping
     t_nn = 1.0; t_nnn = t_nn/10.0
 
     t = np.diag(np.full(sites-1, t_nn), k=1) + np.diag(np.full(sites-1, t_nn), k=-1)
-    t += np.diag(np.full(sites-2, t_nnn), k=2) + np.diag(np.full(sites-2, t_nnn), k=-2)
+    # t += np.diag(np.full(sites-2, t_nnn), k=2) + np.diag(np.full(sites-2, t_nnn), k=-2)
     
+    """
     if PBC:
         t[0, -1], t[-1, 0] = t_nn, t_nn
         t[0, -2], t[-2, 0], t[1, -1], t[-1, 1] = t_nnn, t_nnn, t_nnn, t_nnn
-
+    """
     epsilon = np.zeros(sites)
     # parameter to adjust the extent to which the jump varies over
     interface_width = 2.5
@@ -484,7 +521,7 @@ if __name__ == '__main__':
     Z_guess = np.full(sites, 0.5)
     K_guess = np.full(sites,-1.5)
 
-    omega_vals = np.linspace(-10,10,20000)
+    omega_vals = np.linspace(-20,20,100000)
 
     U = 0.0
     beta = 50.0
@@ -492,8 +529,8 @@ if __name__ == '__main__':
     h, Z, K, t_eff, nf, L, mu, num_cycles = update_params(epsilon, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l_max, sites, N_target)
     H_rotor_vec_nodope = get_H_rotor_vec(U, h, K, l_max, sites)
 
-    title = f'Electron Occupancy at Half-Filling:' + r'$U =$ ' + f'{U}, ' + r'$\beta =$ ' + f'{beta}, ' + r'$\mu = 0.0$'
-    plotting.plot_electron_occupancy(nf, title, plot_junction=False)
+    # title = f'Electron Occupancy at Half-Filling:' + r'$U =$ ' + f'{U}, ' + r'$\beta =$ ' + f'{beta}, ' + r'$\mu = 0.0$'
+    # plotting.plot_electron_occupancy(nf, title, plot_junction=False)
 
     print(f'before spectrum calculation')
     rho_f, rho_theta, rho_d = get_spectra(omega_vals, epsilon, U, t_eff, h, mu, K, beta, l_max, sites, N_target, True, True, True)    
