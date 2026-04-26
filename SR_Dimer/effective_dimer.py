@@ -70,6 +70,7 @@ def get_eff_H_rotor(U, h, J_eff, l_max):
 
     return H_rotor
 
+
 """
     Computes t_eff
 """
@@ -238,22 +239,27 @@ def get_d_L(U, h, dh, J_eff, beta, l_max):
     Iterate over parameters until convergence
     Code isn't pretty due to having to redundantly define parameters at some point, but it gets the job done
 """
-def update_params(epsilon, U, t, h_guess, J_eff_guess, beta, l_max):
-    dh = 1e-4
+def update_params(epsilon, U, t, h_guess, t_eff_guess, J_eff_guess, beta, l_max):
+    ALPHA_H = 0.1
+    ALPHA_T_EFF = 0.1
+    ALPHA_J_EFF = 0.1
+
+    TOL_H = 1e-8
+    TOL_T_EFF = 1e-8
+    TOL_J_EFF = 1e-8
+
+    dh = 1e-5
     did_converge = False
 
     # Initial values to guess for iteration
     # Assume J_eff ~ t i.e. 
-    h_update = h_guess
+    h_update, t_eff_update, J_eff_update = h_guess, t_eff_guess, J_eff_guess
+
     t_eff_update = get_t_eff(U, t, h_update, J_eff_guess, beta, l_max)
     J_eff_update = get_J_eff(epsilon, h_update, t, t_eff_update, beta)
 
-    alpha = 0.1
-
     while not did_converge:
-        h = h_update
-        t_eff = t_eff_update 
-        J_eff = J_eff_update
+        h, t_eff, J_eff_update  = h_update, t_eff_update, J_eff_update
 
         nf = get_nf(epsilon, h, t_eff, beta)
         L = get_L(U, h, J_eff, beta, l_max)
@@ -261,92 +267,158 @@ def update_params(epsilon, U, t, h_guess, J_eff_guess, beta, l_max):
         d_nf = get_d_nf(epsilon, h, dh, t_eff, beta)
         d_L = get_d_L(U, h, dh, J_eff, beta, l_max)
 
+        f = nf - L - 1.0
+        J = get_J()
+
+        try:
+            delta_h = np.linalg.solve(J, f)
+        except np.linalg.LinAlgError:
+            sys.exit('Singular Jacobian')
+
         # Newton's method
-        h_update = h - alpha * (nf - L - 1)/(d_nf - d_L)
+        h_update = h - ALPHA_H * delta_h
 
         # Get updated params
-        t_eff_update = get_t_eff(U, t, h_update, J_eff, beta, l_max)
-        J_eff_update = get_J_eff(epsilon, h_update, t, t_eff_update, beta)
+        t_eff_update = (1 - ALPHA_T_EFF) * t_eff + ALPHA_T_EFF * get_t_eff(U, t, h_update, J_eff, beta, l_max)
+        J_eff_update = (1 - ALPHA_J_EFF) * J_eff + ALPHA_J_EFF * get_J_eff(epsilon, h_update, t, t_eff_update, beta)
 
-        if (np.abs(h_update - h) < 1e-6) and (np.abs(t_eff_update - t_eff) < 1e-6) and (np.abs(J_eff_update - J_eff) < 1e-6):
-            did_converge = True
+        did_converge = (
+            np.allclose(h_update, h, atol=TOL_H) and
+            np.allclose(t_eff_update, t_eff, atol=TOL_T_EFF) and
+            np.allclose(J_eff_update, J_eff, atol=TOL_J)
+        )
 
+    nf = get_nf(epsilon, h, t_eff, beta)
+    d_L = get_L(U, h, J_eff, beta, l_max)
+    
     return h_update, t_eff_update, J_eff_update, nf
 
 def spinon_spectrum(omega, epsilon, h, t_eff, beta):
+    
     E_plus = get_E_plus(epsilon, h, t_eff)
     E_minus = get_E_minus(epsilon, h, t_eff)
 
     energies = [E_plus, E_minus]
 
-    spectrum = 0.0
-    for energy in energies:
-        spectrum += helpers.d_delta(omega - energy) * (1 - helpers.fermi_dirac(energy, beta) + helpers.d_delta(omega + energy)) * helpers.fermi_dirac(energy, beta)
-
     return spectrum
 
-"""
-    Rotor spectral function
-    Calculation is incredibly computationally expensive
-    Basically useless
-"""
-def rotor_spectrum(omega, energies, states, beta, l_max):
-    dim = len(energies)
-    print(f'dim: {dim}')
-    rotor_basis = get_eff_rotor_basis(l_max)
-    basis_index = {tuple(state): i for i, state in enumerate(rotor_basis)}
+def get_rotor_spectrum(omega_vals, energies, states, beta, l_max, eta=1e-2):
+    N_l = 2 * l_max + 1
+    S1 = np.eye(N_l, k=-1)            # shift l_1 -> l_1 + 1
+    I2 = np.eye(N_l)
+    T = np.kron(S1, I2)               # (D, D) with D = N_l**2
 
-    energies = energies - energies[0]
+    M = states.conj().T @ T @ states
+    abs_M2 = (M.conj() * M).real      # |<m|T|n>|^2, shape (N, N)
+    exp_E = np.exp(-beta * energies)  # (N,)
+    Z = exp_E.sum()
 
-    num_sum, den_sum = 0.0, 0.0
+    boltz_diff = exp_E[None, :] - exp_E[:, None]
 
-    for i in range(dim):
-        state1 = states[:,i]
-        energy1 = energies[i]
+    dE = energies[:, None] - energies[None, :]
 
-        boltzmann = np.exp(-beta * energy1)
-        rotor_sum = 0.0
-        
-        for j in range(dim):
-            state2 = states[:,j]
-            energy2 = energies[j]
+    weights = (abs_M2 * boltz_diff).ravel()    # (N*N,)
+    dE_flat = dE.ravel()                       # (N*N,)
 
-            for m in range(dim):
-                l1, l2 = rotor_basis[m]
+    diffs = omega_vals[:, None] - dE_flat[None, :]          # (K, N*N)
+    lorentz = (eta / np.pi) / (diffs * diffs + eta * eta)   # (K, N*N)
 
-                for n in range(dim):
-                    l1_prime, l2_prime = rotor_basis[n]
-                    
-                    if (not l1 == -l_max) and (not l1_prime == l_max):
-                        rotor_sum += (
-                            np.conj(state1[basis_index[l1,l2]]) * state1[basis_index[l1_prime+1,l2_prime]]
-                            * np.conj(state2[basis_index[l1_prime,l2_prime]]) * state2[basis_index[l1-1,l2]]
-                            * helpers.d_delta(omega - (energy1 - energy2))
-                        )
-
-        num_sum += boltzmann * rotor_sum
-        den_sum += boltzmann
-
-    spectrum = num_sum / den_sum
-    return spectrum
-
+    rho = lorentz @ weights / Z   
+                              # (K,)
+    return rho
 """
     Uses the (1,0,...), (0,1,...), nature of some parameter's eigenvector solutions to quickly calculate the rotor spectral function
 """
-def rotor_spectrum_quick(omega, energies, beta):
-    dim = len(energies)
+def get_spectra(
+        omega_vals: float, epsilon: float, U: float, t_eff: float, h: float, mu: float, K, beta, l_max, sites, N_target,
+        plot_spinon_spectrum, plot_rotor_spectrum, plot_electron_spectrum, a=1.0, eta=1e-4
+    ):
+    domain_dim = len(omega_vals)
+    half_domain = int(len(omega_vals)/2.0)
+    domega = np.abs(omega_vals[1] - omega_vals[0])
+    
+    # Super weird with whether I'm passing scalar or vector values for some parameters. Should clean up soon
+    spinon_spectrum_vals = get_spinon_spectrum(omega_vals, epsilon, t_eff, h, mu, sites)
+    spinon_peaks = helpers.get_peaks_idx(spinon_spectrum_vals)
+    print(f'Spinon spectrum integral: {scipy.integrate.trapezoid(spinon_spectrum_vals, omega_vals)}') # Check spinon norm
+    print(f'spinon peaks: {[omega_vals[peak] for peak in spinon_peaks]}') # Check peaks in spinon
+ 
+    rotor_spectrum_vals =  get_rotor_spectrum(omega_vals, U, h, K, beta, l_max)
+    rotor_peaks = helpers.get_peaks_idx(rotor_spectrum_vals)
+    print(f'Rotor spectrum integral: {scipy.integrate.trapezoid(rotor_spectrum_vals, omega_vals)}') # Check rotor norm
+    print(f'Rotor peaks: {[omega_vals[peak] for peak in rotor_peaks]}')
+    """
+    Manually play with rotors spectrum
 
-    # Gets first term done with cutoff to not include energies below ground state (dont exist)
-    spectral_val = np.exp(-beta * energies[0]) * helpers.d_delta(omega - energies[0], 1e-2)
+    rotor_spectrum_vals = np.zeros(len(omega_vals))
+    rotor_spectrum_vals[half_domain] = 500
+    rotor_spectrum_vals[half_domain - 1] = 1000
+    """
 
-    for i in range(1,dim):
-        energy1 = energies[i]
-        energy0 = energies[i-1]
-        boltzmann = np.exp(-beta * energy1)
+    if plot_spinon_spectrum:
+        plt.plot(omega_vals, spinon_spectrum_vals)
+        plt.xticks(
+            [-10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8 ,9, 10],
+            ['-10', '-9', '-8', '-7', '-6', '-5', '-4', '-3', '-2', '-1', '0', '1', '2', '3', '4', '5', '6', '7', '8' ,'9', '10'],
+        )
 
-        spectral_val += boltzmann * helpers.d_delta(omega - (energy1 - energy0), 1e-2)
+        plt.xlabel(r'$\omega$')
+        plt.ylabel(r'$\rho_f(\omega)$')
+        plt.title(r'Spinon spectrum for $U= $ ' + f'{U}, ' + r'$\beta =$ ' + f'{beta}, ' + r'$N = $' + f'{N_target}')
+        plt.tight_layout()
 
-    return spectral_val
+        plt.show()
+    
+    if plot_rotor_spectrum:
+        plt.plot(omega_vals, rotor_spectrum_vals)
+
+        plt.xlabel(r'$\omega$')
+        plt.ylabel(r'$\rho_f(\omega)$')
+        plt.title(r'Rotor spectram for $U= $ ' + f'{U}, ' + r'$\beta =$ ' + f'{beta}, ' + r'$N = $' + f'{N_target}')
+        plt.tight_layout()
+
+        plt.show()
+    
+    fd_vals = np.array([helpers.fermi_dirac(omega, beta) for omega in omega_vals])
+    be_vals = np.array([helpers.bose_einstein(omega, beta) for omega in omega_vals])
+
+    spectral_1 = scipy.signal.fftconvolve(
+        spinon_spectrum_vals,
+        rotor_spectrum_vals,
+        mode='same'
+    ) * domega
+
+    spectral_fd = scipy.signal.fftconvolve(
+        -spinon_spectrum_vals * fd_vals,
+        rotor_spectrum_vals,
+        mode='same'
+    ) * domega
+
+    spectral_be = scipy.signal.fftconvolve(
+        spinon_spectrum_vals,
+        rotor_spectrum_vals * be_vals,
+        mode='same'
+    ) * domega
+
+    phys_spectrum_vals_unnorm = (-spectral_1 - spectral_fd - spectral_be) 
+    phys_spectrum_vals = phys_spectrum_vals_unnorm / scipy.integrate.trapezoid(phys_spectrum_vals_unnorm, omega_vals)
+
+    if plot_electron_spectrum:
+        plt.plot(omega_vals, phys_spectrum_vals)
+        plt.xticks(
+            [-10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8 ,9, 10],
+            ['-10', '-9', '-8', '-7', '-6', '-5', '-4', '-3', '-2', '-1', '0', '1', '2', '3', '4', '5', '6', '7', '8' ,'9', '10'],
+        )
+
+        plt.xlabel(r'$\omega$')
+        plt.ylabel(r'$\rho_d(\omega)$', rotation='horizontal')
+        plt.title(r'Physical spectral function for $U= $ ' + f'{U}, ' + r'$\beta =$ ' + f'{beta}, ' + r'$N = $' + f'{N_target}')
+
+        plt.tight_layout()
+
+        plt.show()
+
+    return spinon_spectrum_vals, rotor_spectrum_vals, phys_spectrum_vals
 
 
 if __name__ == '__main__':

@@ -116,15 +116,17 @@ def check_Z(U, K, h, nf, N_AT=2):
     return Z
 
 def get_exact_spectrum(U, t, N):
+    t_val = t[0,1]
+
     if N == 0:
         energies = [0]
     elif N == 1:
-        energies = [-t,-t,t,t]
+        energies = [-t_val,-t_val,t_val,t_val]
     elif N == 2:
-        c = np.sqrt(U**2 + 16 * t**2)
+        c = np.sqrt(U**2 + 16 * t_val**2)
         energies = [(U - c) / 2, 0, 0, 0, U, (U + c) / 2]
     elif N == 3:
-        energies = [U - t, U - t, U + t, U + t]
+        energies = [U - t_val, U - t_val, U + t_val, U + t_val]
     elif N == 4:
         energies = [2 * U]
     else:

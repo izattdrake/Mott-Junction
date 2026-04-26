@@ -1,5 +1,7 @@
 import numpy as np
+import warnings
 import itertools
+import scipy
 
 """
     Constants used for computation
@@ -79,20 +81,16 @@ def fermi_dirac(E, beta, mu=0):
 def bose_einstein(E, beta):
     x = beta * E
 
-    """
-    if x > 0:
-        x_safe = np.maximum(x, 1e-12)
-    elif x < 0:
-        x_safe = -np.maximum(np.abs(x), 1e-12)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
 
-    n = 1 / np.expm1(x_safe)
-    """
-
-    if x < 0:
-        n = 1.0 / (np.exp(x) - 1.0 - 1e-10)
-    elif x > 0:
-        n = 1.0 / (np.exp(x) - 1.0 + 1e-10)
-
+        try:
+            if x > 0:
+                n = 1.0 / (np.exp(x) - 1.0 + 1e-10)
+            elif x < 0:
+                n = 1.0 / (np.exp(x) - 1.0 - 1e-10)
+        except RuntimeWarning as e:
+            n = 0.0
     return n
 
 """
@@ -169,3 +167,9 @@ def print_params(t_eff, h, mu, Z, K, nf, L, should_print=True):
         print(f'L: {L}')
         print(f'mu: {mu}\n')
 
+"""
+    Gets peaks in a function
+"""
+def get_peaks_idx(spectrum):
+    peaks, _ = scipy.signal.find_peaks(spectrum)
+    return peaks
