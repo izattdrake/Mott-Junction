@@ -84,8 +84,8 @@ def get_J(epsilon, U, t_eff, h, dh, mu, K, beta, l_max, sites):
         J = np.zeros((sites, sites))
         for j in range(sites):
             h_p, h_m = h.copy(), h.copy()
-            h_p[j] += dh/2
-            h_m[j] -= dh/2
+            h_p[j] += dh/2.0
+            h_m[j] -= dh/2.0
 
             eigvals_p, eigvecs_p = np.linalg.eigh(get_H_spinon(epsilon, t_eff, h_p, mu))
             eigvals_m, eigvecs_m = np.linalg.eigh(get_H_spinon(epsilon, t_eff, h_m, mu))
@@ -459,13 +459,10 @@ def get_E_hc(epsilon, U, t, spinon_basis_label, rotor_states):
         raise ValueError('get_E_hc: Spinon basis state must be labeled 0, 1, 2, 3')
     
     
-    def get_F_epsilon(i, sigma, state):
-        if sigma not in [0,1]:
-            raise ValueError('get_F_epsilon: sigma value error')
-        
-        if state == 0:
+    def get_F_epsilon(i, sigma, spinon_label):        
+        if spinon_label == 0:
             return 0.5
-        elif state == 1:
+        elif spinon_label == 1:
             if sigma == 0:
                 return 0.0
             elif sigma == 1:
@@ -473,17 +470,19 @@ def get_E_hc(epsilon, U, t, spinon_basis_label, rotor_states):
                     return 0.5
                 elif i == 1:
                     return -0.5
-        elif state == 2:
-            if sigma == 1:
-                return 0.0
-            elif sigma == 0:
+        elif spinon_label == 2:
+            if sigma == 0:
                 if i == 0:
                     return 0.5
                 elif i == 1:
                     return -0.5
-        elif state == 3:
+            elif sigma == 1:
+                return 0.0
+        elif spinon_label == 3:
             return 0.0
-    
+        else:
+            raise ValueError('get_F_epsilon: sigma value error')
+        
     def get_F_t(i, j, sigma, state):
         if i == j:
             return 0.0
@@ -548,7 +547,7 @@ if __name__ == '__main__':
     half_sites = int(sites/2.0)
     N_target = int(1.0*sites) #Half filling
 
-    l_max = 50
+    l_max = 1
     l_vals = np.arange(-l_max, l_max + 1)
 
     # Add nearest-neighbor hopping
@@ -582,7 +581,7 @@ if __name__ == '__main__':
 
     omega_vals = np.linspace(-10,10,20000)
 
-    U_vals = np.linspace(0,0.01,10)
+    U_vals = np.linspace(0,3.5,100)
     beta = 50.0
 
     energies_exact = [[], [], [], [], [], []]
@@ -601,22 +600,31 @@ if __name__ == '__main__':
 
         H_rotor = get_H_rotor(U, h, K, l_max, 0)
         eigvals_rotor, eigvecs_rotor = np.linalg.eigh(H_rotor)
-
-        rotor_states = [eigvecs_rotor[0], eigvecs_rotor[0]]
+        vec1 = eigvecs_rotor[0]
+        vec2 = eigvecs_rotor[0]
+        rotor_states = [vec1/np.linalg.norm(vec1), vec2/np.linalg.norm(vec2)]
         for i in range(4):
-            energies_mf[i].append(get_E_hc(epsilon, U, t, i, rotor_states))
+            energies_mf[i].append(get_E_hc(epsilon, U, 2*t, i, rotor_states))
 
         count += 1
         print(count)
 
     plt.figure()
     for i in range(6):
-        plt.plot(U_vals, energies_exact[i], color='red')
+        if i==0:
+            plt.plot(U_vals, energies_exact[i], color='red', label='Exact')
+        else:
+            plt.plot(U_vals, energies_exact[i], color='red')
+
     for i in range(4):
-        plt.plot(U_vals, energies_mf[i], color='blue')
+        if i == 0:
+            plt.plot(U_vals, energies_mf[i], color='blue', label='MF')
+        else:
+            plt.plot(U_vals, energies_mf[i], color='blue')
 
     plt.xlabel(r'$U/t$')
     plt.ylabel(r'$E$')
-    plt.title(f'Rotor spectrum plotted against exact spectrum')
+    plt.title(r'Exact vs. MF Spectrum: $|\psi_\theta> = |\psi_{\theta,0}>\otimes|\psi_{\theta,1}>$')
     plt.grid(True)
+    plt.legend()
     plt.show()

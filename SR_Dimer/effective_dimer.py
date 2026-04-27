@@ -23,10 +23,11 @@ P4_L_VALS = [(1,1)]
     Good problem to bridge the gap between the exact and mean-field problems
 """
 
-"""
-    Returns |l_1 l_2> basis elements
-"""
 def get_eff_rotor_basis(l_max):
+    """
+        Returns |l_1 l_2> basis elements
+    """
+
     l_vals = np.arange(-l_max, l_max + 1)
     basis = list(itertools.product(
         l_vals, l_vals
@@ -34,27 +35,28 @@ def get_eff_rotor_basis(l_max):
 
     return np.array(basis)
 
-"""
-    Returns l_1 and l_2 corresponding to a given index
-"""
-def get_eff_rotor_index(l1, l2, l_max):
-    index = (l1 + l_max) * (2 * l_max + 1) + (l2 + l_max)
 
+def get_eff_rotor_index(l1, l2, l_max):
+    """
+    Returns computation indx i \in [0, 2l_max + 1) for (l1,l2) value
+    """
+    index = (l1 + l_max)*(2*l_max + 1) + (l2 + l_max)
     return index
 
-"""
-    Returns effective rotor matrix elements <l1,l2|H_{theta}|l1_prime, l2_prime>
-"""
-def get_eff_H_rotor_mel(U, h, J_eff, l1, l2, l1_prime, l2_prime):
-    diag = ((U / 2) * (l1**2 + l2**2) + h*(l1 + l2)) * helpers.k_delta(l1,l1_prime) * helpers.k_delta(l2,l2_prime)
-    off_diag = -J_eff * (helpers.k_delta(l1, l1_prime + 1) * helpers.k_delta(l2, l2_prime - 1) + helpers.k_delta(l1, l1_prime - 1) * helpers.k_delta(l2, l2_prime + 1))
-    
-    return diag + off_diag
 
-"""
-    Returns effective rotor Hamiltonian matrix in the |l1,l2> basis
-"""
-def get_eff_H_rotor(U, h, J_eff, l_max):
+def get_H_rotor(U, h, J_eff, l_max):
+    """
+        Returns effective rotor Hamiltonian matrix in the |l1,l2> basis
+    """
+    def get_H_rotor_mel(U, h, J_eff, l1, l2, l1_prime, l2_prime):
+        """
+            Returns effective rotor matrix elements <l1,l2|H_{theta}|l1_prime, l2_prime>
+        """
+        diag = ((U / 2) * (l1**2 + l2**2) + h*(l1 + l2)) * helpers.k_delta(l1,l1_prime) * helpers.k_delta(l2,l2_prime)
+        off_diag = -J_eff * (helpers.k_delta(l1, l1_prime + 1) * helpers.k_delta(l2, l2_prime - 1) + helpers.k_delta(l1, l1_prime - 1) * helpers.k_delta(l2, l2_prime + 1))
+        
+        return diag + off_diag
+    
     rotor_basis = get_eff_rotor_basis(l_max)
     dim_basis = len(rotor_basis)
 
@@ -66,7 +68,7 @@ def get_eff_H_rotor(U, h, J_eff, l_max):
         for j in range(dim_basis):
 
             l1_prime, l2_prime = rotor_basis[j]
-            H_rotor[i,j] = get_eff_H_rotor_mel(U, h, J_eff, l1, l2, l1_prime, l2_prime)
+            H_rotor[i,j] = get_H_rotor_mel(U, h, J_eff, l1, l2, l1_prime, l2_prime)
 
     return H_rotor
 
@@ -74,13 +76,13 @@ def get_eff_H_rotor(U, h, J_eff, l_max):
 """
     Computes t_eff
 """
-def get_t_eff(U, t, h, J_eff, beta, l_max):
-    rotor_dim = (2 * l_max + 1)**2
+def get_t_eff(U, t_mat, h_vec, J_eff_vec, beta, l_max):
+    rotor_dim = (2*l_max + 1) * (2*l_max + 1)
     rotor_basis = get_eff_rotor_basis(l_max)
 
     basis_index = {tuple(state): i for i, state in enumerate(rotor_basis)}
 
-    H_rotor = get_eff_H_rotor(U, h, J_eff, l_max)
+    H_rotor = get_H_rotor(U, h_vec, J_eff_vec, l_max)
     rotor_energies, rotor_states = np.linalg.eigh(H_rotor)
     # Shift rotor energies to avoid large exponentials
     # Division in t_eff's formula cancels the shift
@@ -90,7 +92,7 @@ def get_t_eff(U, t, h, J_eff, beta, l_max):
 
     for i in range(rotor_dim):
         rotor_energy = rotor_energies[i]
-        boltzmann = np.exp(-beta * rotor_energy)
+        bz = np.exp(-beta * rotor_energy)
         state = rotor_states[:,i]
         
         rotor_sum = 0.0
@@ -104,10 +106,10 @@ def get_t_eff(U, t, h, J_eff, beta, l_max):
                 rotor_sum += 0
 
             elif (l1 == -l_max) and (not l2 == -l_max and not l2 == l_max):
-                rotor_sum += np.conj(state[basis_index[l1,l2]]) * state[basis_index[l1+1,l2-1]]/2
+                rotor_sum += np.conj(state[basis_index[l1,l2]]) * state[basis_index[l1+1,l2-1]] / 2
 
             elif (l1 == l_max) and (not l2 == -l_max and not l2 == l_max):
-                rotor_sum += np.conj(state[basis_index[l1,l2]]) * state[basis_index[l1-1, l2+1]]/2
+                rotor_sum += np.conj(state[basis_index[l1,l2]]) * state[basis_index[l1-1, l2+1]] / 2
 
             elif (l2 == -l_max) and (not l1 == -l_max and not l1 == l_max):
                 rotor_sum += np.conj(state[basis_index[l1,l2]]) * state[basis_index[l1-1,l2+1]] / 2
@@ -118,11 +120,11 @@ def get_t_eff(U, t, h, J_eff, beta, l_max):
             elif (not l1 == -l_max and not l1 == l_max) and (not l2 == -l_max and not l2 == l_max):
                 rotor_sum += np.conj(state[basis_index[l1,l2]]) * (state[basis_index[l1+1,l2-1]] + state[basis_index[l1-1,l2+1]])/2
             
-        num_sum += boltzmann * rotor_sum
-        den_sum += boltzmann
+        num_sum += bz * rotor_sum
+        den_sum += bz
     
-    t_eff = t * (num_sum / den_sum)
-    return t_eff
+    t_eff_mat = t_mat * (num_sum / den_sum)
+    return t_eff_mat
         
 """
     Returns the index corresponding to a 
@@ -173,13 +175,26 @@ def get_nf(epsilon, h, t_eff, beta, mu=0.0):
     return nf
 
 """
+    Return derivative of nf with respect to h
+"""
+def get_d_nf(epsilon, h, dh, t_eff, beta):
+    get_t_eff(U, t, h, J_eff)
+    nf_p = get_nf(epsilon, h + dh/2.0, t_eff, beta)
+    nf_m = get_nf(epsilon, h - dh/2.0, t_eff, beta)
+
+    d_nf = (nf_p - nf_m) / dh
+
+    return d_nf
+
+
+"""
     Returns the thermal average of L over the rotor Hamiltonian
 """
 def get_L(U, h, J_eff, beta, l_max, SITE=1):
     rotor_dim = (2 * l_max + 1)**2
     basis = get_eff_rotor_basis(l_max)
 
-    H_rotor = get_eff_H_rotor(U, h, J_eff, l_max)
+    H_rotor = get_H_rotor(U, h, J_eff, l_max)
     rotor_energies, rotor_states = np.linalg.eigh(H_rotor)
 
     rotor_energies = rotor_energies - rotor_energies[0]
@@ -212,18 +227,6 @@ def get_L(U, h, J_eff, beta, l_max, SITE=1):
 
 
 """
-    Return derivative of nf with respect to h
-"""
-def get_d_nf(epsilon, h, dh, t_eff, beta):
-    nf_plus = get_nf(epsilon, h + dh /2.0, t_eff, beta)
-    nf_minus = get_nf(epsilon, h - dh/2.0, t_eff, beta)
-
-    d_nf = (nf_plus - nf_minus) / dh
-
-    return d_nf
-
-
-"""
     Return derivative of L with respect to h
 """
 def get_d_L(U, h, dh, J_eff, beta, l_max):
@@ -235,11 +238,35 @@ def get_d_L(U, h, dh, J_eff, beta, l_max):
     return d_L
 
 
+
+def get_Jac(epsilon, U, t_eff, h, dh, mu, K, beta, l_max, sites):
+    """
+        Return Jacobian used in Newton's method
+    """
+    def get_Jac_nf():
+        """
+            Returns spinon occupancy contribution to Jacobian 
+        """
+        J = np.zeros((2,2))
+        for j in range(2):
+            h_p, h_m = h.copy(), h.copy()
+            h_p[j] += dh / 2.0
+            h_m[j] -= dh / 2.0
+
+            eigvals_p, eigvecs_p = np.linalg.eigh(get_)
+        return
+    
+    def get_Jac_L():
+        """
+            Returns rotor contribution to Jacobian
+        """
+
+
 """
     Iterate over parameters until convergence
     Code isn't pretty due to having to redundantly define parameters at some point, but it gets the job done
 """
-def update_params(epsilon, U, t, h_guess, t_eff_guess, J_eff_guess, beta, l_max):
+def update_params(epsilon_vec, U, t_mat, h_vec_guess, t_eff_mat_guess, J_eff_vec_guess, beta, l_max):
     ALPHA_H = 0.1
     ALPHA_T_EFF = 0.1
     ALPHA_J_EFF = 0.1
@@ -253,22 +280,22 @@ def update_params(epsilon, U, t, h_guess, t_eff_guess, J_eff_guess, beta, l_max)
 
     # Initial values to guess for iteration
     # Assume J_eff ~ t i.e. 
-    h_update, t_eff_update, J_eff_update = h_guess, t_eff_guess, J_eff_guess
+    h_vec_update, t_eff_mat_update, J_eff_vec_update = h_vec_guess, t_eff_mat_guess, J_eff_vec_guess
 
-    t_eff_update = get_t_eff(U, t, h_update, J_eff_guess, beta, l_max)
-    J_eff_update = get_J_eff(epsilon, h_update, t, t_eff_update, beta)
+    t_eff_mat_update = get_t_eff(U, t_mat, h_vec_update, J_eff_vec_guess, beta, l_max)
+    J_eff_vec_update = get_J_eff(epsilon_vec, h_vec_update, t_mat, t_eff_mat_update, beta)
 
     while not did_converge:
-        h, t_eff, J_eff_update  = h_update, t_eff_update, J_eff_update
+        h_vec, t_eff_mat, J_eff_vec  = h_vec_update, t_eff_mat_update, J_eff_vec_update
 
-        nf = get_nf(epsilon, h, t_eff, beta)
-        L = get_L(U, h, J_eff, beta, l_max)
+        nf_vec = get_nf(epsilon_vec, h_vec, t_eff_mat, beta)
+        L_vec = get_L(U, h_vec, J_eff_vec, beta, l_max)
 
-        d_nf = get_d_nf(epsilon, h, dh, t_eff, beta)
-        d_L = get_d_L(U, h, dh, J_eff, beta, l_max)
+        d_nf_vec = get_d_nf(epsilon_vec, h_vec, dh, t_eff_mat, beta)
+        d_L_vec = get_d_L(U, h_vec, dh, J_eff_vec, beta, l_max)
 
-        f = nf - L - 1.0
-        J = get_J()
+        f = nf_vec - L_vec - 1.0
+        J = get_Jacobian()
 
         try:
             delta_h = np.linalg.solve(J, f)
@@ -276,180 +303,52 @@ def update_params(epsilon, U, t, h_guess, t_eff_guess, J_eff_guess, beta, l_max)
             sys.exit('Singular Jacobian')
 
         # Newton's method
-        h_update = h - ALPHA_H * delta_h
+        h_vec_update = h_vec - ALPHA_H * delta_h
 
         # Get updated params
-        t_eff_update = (1 - ALPHA_T_EFF) * t_eff + ALPHA_T_EFF * get_t_eff(U, t, h_update, J_eff, beta, l_max)
-        J_eff_update = (1 - ALPHA_J_EFF) * J_eff + ALPHA_J_EFF * get_J_eff(epsilon, h_update, t, t_eff_update, beta)
+        t_eff_mat_update = (1 - ALPHA_T_EFF) * t_eff_mat + ALPHA_T_EFF * get_t_eff(U, t_mat, h_vec_update, J_eff, beta, l_max)
+        J_eff_vec_update = (1 - ALPHA_J_EFF) * J_eff_vec + ALPHA_J_EFF * get_J_eff(epsilon_vec, h_vec_update, t_mat, t_eff_mat_update, beta)
 
         did_converge = (
-            np.allclose(h_update, h, atol=TOL_H) and
-            np.allclose(t_eff_update, t_eff, atol=TOL_T_EFF) and
-            np.allclose(J_eff_update, J_eff, atol=TOL_J)
+            np.allclose(h_vec_update, h_vec, atol=TOL_H) and
+            np.allclose(t_eff_mat_update, t_eff_mat, atol=TOL_T_EFF) and
+            np.allclose(J_eff_vec_update, J_eff_vec, atol=TOL_J_EFF)
         )
 
-    nf = get_nf(epsilon, h, t_eff, beta)
-    d_L = get_L(U, h, J_eff, beta, l_max)
-    
-    return h_update, t_eff_update, J_eff_update, nf
+    nf_vec = get_nf(epsilon_vec, h_vec, t_eff_mat, beta)
+    d_L_vec = get_L(U, h_vec, J_eff_vec, beta, l_max)
 
-def spinon_spectrum(omega, epsilon, h, t_eff, beta):
-    
-    E_plus = get_E_plus(epsilon, h, t_eff)
-    E_minus = get_E_minus(epsilon, h, t_eff)
-
-    energies = [E_plus, E_minus]
-
-    return spectrum
-
-def get_rotor_spectrum(omega_vals, energies, states, beta, l_max, eta=1e-2):
-    N_l = 2 * l_max + 1
-    S1 = np.eye(N_l, k=-1)            # shift l_1 -> l_1 + 1
-    I2 = np.eye(N_l)
-    T = np.kron(S1, I2)               # (D, D) with D = N_l**2
-
-    M = states.conj().T @ T @ states
-    abs_M2 = (M.conj() * M).real      # |<m|T|n>|^2, shape (N, N)
-    exp_E = np.exp(-beta * energies)  # (N,)
-    Z = exp_E.sum()
-
-    boltz_diff = exp_E[None, :] - exp_E[:, None]
-
-    dE = energies[:, None] - energies[None, :]
-
-    weights = (abs_M2 * boltz_diff).ravel()    # (N*N,)
-    dE_flat = dE.ravel()                       # (N*N,)
-
-    diffs = omega_vals[:, None] - dE_flat[None, :]          # (K, N*N)
-    lorentz = (eta / np.pi) / (diffs * diffs + eta * eta)   # (K, N*N)
-
-    rho = lorentz @ weights / Z   
-                              # (K,)
-    return rho
-"""
-    Uses the (1,0,...), (0,1,...), nature of some parameter's eigenvector solutions to quickly calculate the rotor spectral function
-"""
-def get_spectra(
-        omega_vals: float, epsilon: float, U: float, t_eff: float, h: float, mu: float, K, beta, l_max, sites, N_target,
-        plot_spinon_spectrum, plot_rotor_spectrum, plot_electron_spectrum, a=1.0, eta=1e-4
-    ):
-    domain_dim = len(omega_vals)
-    half_domain = int(len(omega_vals)/2.0)
-    domega = np.abs(omega_vals[1] - omega_vals[0])
-    
-    # Super weird with whether I'm passing scalar or vector values for some parameters. Should clean up soon
-    spinon_spectrum_vals = get_spinon_spectrum(omega_vals, epsilon, t_eff, h, mu, sites)
-    spinon_peaks = helpers.get_peaks_idx(spinon_spectrum_vals)
-    print(f'Spinon spectrum integral: {scipy.integrate.trapezoid(spinon_spectrum_vals, omega_vals)}') # Check spinon norm
-    print(f'spinon peaks: {[omega_vals[peak] for peak in spinon_peaks]}') # Check peaks in spinon
- 
-    rotor_spectrum_vals =  get_rotor_spectrum(omega_vals, U, h, K, beta, l_max)
-    rotor_peaks = helpers.get_peaks_idx(rotor_spectrum_vals)
-    print(f'Rotor spectrum integral: {scipy.integrate.trapezoid(rotor_spectrum_vals, omega_vals)}') # Check rotor norm
-    print(f'Rotor peaks: {[omega_vals[peak] for peak in rotor_peaks]}')
-    """
-    Manually play with rotors spectrum
-
-    rotor_spectrum_vals = np.zeros(len(omega_vals))
-    rotor_spectrum_vals[half_domain] = 500
-    rotor_spectrum_vals[half_domain - 1] = 1000
-    """
-
-    if plot_spinon_spectrum:
-        plt.plot(omega_vals, spinon_spectrum_vals)
-        plt.xticks(
-            [-10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8 ,9, 10],
-            ['-10', '-9', '-8', '-7', '-6', '-5', '-4', '-3', '-2', '-1', '0', '1', '2', '3', '4', '5', '6', '7', '8' ,'9', '10'],
-        )
-
-        plt.xlabel(r'$\omega$')
-        plt.ylabel(r'$\rho_f(\omega)$')
-        plt.title(r'Spinon spectrum for $U= $ ' + f'{U}, ' + r'$\beta =$ ' + f'{beta}, ' + r'$N = $' + f'{N_target}')
-        plt.tight_layout()
-
-        plt.show()
-    
-    if plot_rotor_spectrum:
-        plt.plot(omega_vals, rotor_spectrum_vals)
-
-        plt.xlabel(r'$\omega$')
-        plt.ylabel(r'$\rho_f(\omega)$')
-        plt.title(r'Rotor spectram for $U= $ ' + f'{U}, ' + r'$\beta =$ ' + f'{beta}, ' + r'$N = $' + f'{N_target}')
-        plt.tight_layout()
-
-        plt.show()
-    
-    fd_vals = np.array([helpers.fermi_dirac(omega, beta) for omega in omega_vals])
-    be_vals = np.array([helpers.bose_einstein(omega, beta) for omega in omega_vals])
-
-    spectral_1 = scipy.signal.fftconvolve(
-        spinon_spectrum_vals,
-        rotor_spectrum_vals,
-        mode='same'
-    ) * domega
-
-    spectral_fd = scipy.signal.fftconvolve(
-        -spinon_spectrum_vals * fd_vals,
-        rotor_spectrum_vals,
-        mode='same'
-    ) * domega
-
-    spectral_be = scipy.signal.fftconvolve(
-        spinon_spectrum_vals,
-        rotor_spectrum_vals * be_vals,
-        mode='same'
-    ) * domega
-
-    phys_spectrum_vals_unnorm = (-spectral_1 - spectral_fd - spectral_be) 
-    phys_spectrum_vals = phys_spectrum_vals_unnorm / scipy.integrate.trapezoid(phys_spectrum_vals_unnorm, omega_vals)
-
-    if plot_electron_spectrum:
-        plt.plot(omega_vals, phys_spectrum_vals)
-        plt.xticks(
-            [-10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8 ,9, 10],
-            ['-10', '-9', '-8', '-7', '-6', '-5', '-4', '-3', '-2', '-1', '0', '1', '2', '3', '4', '5', '6', '7', '8' ,'9', '10'],
-        )
-
-        plt.xlabel(r'$\omega$')
-        plt.ylabel(r'$\rho_d(\omega)$', rotation='horizontal')
-        plt.title(r'Physical spectral function for $U= $ ' + f'{U}, ' + r'$\beta =$ ' + f'{beta}, ' + r'$N = $' + f'{N_target}')
-
-        plt.tight_layout()
-
-        plt.show()
-
-    return spinon_spectrum_vals, rotor_spectrum_vals, phys_spectrum_vals
+    return h_vec_update, t_eff_mat_update, J_eff_vec_update, nf_vec
 
 
 if __name__ == '__main__':
-    l_max = 5
-    rotor_dim = (2 * l_max + 1)**2
+    PBC = True
 
-    epsilon = 0.5
-    t = 1.0
-    U = 7.0
-    beta = 5
-    particle_num = 1.0
+    N_target = 2 # Half filling
 
-    J_vals = [3,4,5,6,7,8]
-    spinon_energies = []
+    l_max = 12
+    l_vals = np.arange(-l_max, l_max + 1)
 
-    h, t_eff, J_eff, nf = update_params(epsilon, U, t, 0.4, 0.8 * t, beta, l_max)
+    t_val = 1.0;
 
-    H_rotor = get_eff_H_rotor(U, h, J_eff, l_max)
-    energies, states = np.linalg.eigh(H_rotor)
+    t = np.diag(np.full(1, t_val), k=1) + np.diag(np.full(1, t_val), k=-1)
+    epsilon = np.zeros(2)
 
-    basis = get_eff_rotor_basis(l_max)
+    """
+        Initial parameter guesses for iterative Newton's method
+    """
+    t_eff_guess = 0.8 * t
+    h_guess = -epsilon
 
-    omega_vals = np.linspace(-50, 50, 8000)
-    spectral_vals = []
+    U_vals = np.linspace(0,0.01,10)
+    beta = 50.0
 
     count = 0
-    for omega in omega_vals:
-        val = rotor_spectrum_quick(omega, energies, beta)
-        spectral_vals.append(val)
-        count += 1
-        print(count) 
 
-    plot_1D(omega_vals, spectral_vals, 'Rotor half-filling spectral function')
-    print(spectral_vals)
+    for U in U_vals:
+        H_exact = exact.get_H_exact(epsilon[0], U, t_nn, exact.get_def_particle_basis(2))
+        eigvals_exact, _ = np.linalg.eigh(H_exact)
+        
+
+        h, Z, K, t_eff, nf, L, mu, num_cycles = update_params(epsilon)
+
