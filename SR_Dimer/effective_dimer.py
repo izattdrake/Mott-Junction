@@ -168,33 +168,25 @@ def get_J_eff(epsilon, h, t, t_eff, beta):
     Returns the fermion occupation at a given site
     Since the system is homogenous, <n_i>_f is the same at both sites
 """
-def get_nf(epsilon, h, t_eff, beta, mu=0.0):
-    E_plus, E_minus = get_E_plus(epsilon, h, t_eff), get_E_minus(epsilon, h, t_eff)
+def get_nf_vec(epsilon_vec, h_vec, t_eff_mat, beta, mu_vec=np.array([0.0,0.0])):
+    # Hardcode doped spectrum? May as well at some point. For now assume homogeneous
+    E_plus = get_E_plus(epsilon_vec[0], h_vec[0], t_eff_mat)
+    E_minus = get_E_minus(epsilon_vec[0], h_vec[0], t_eff_mat)
+
+    # See overleaf for formula, assume homogeneous, extend to inhomogeneous
     nf = helpers.fermi_dirac(E_plus, beta, mu) + helpers.fermi_dirac(E_minus, beta, mu)
-    
-    return nf
+    nf_vec = np.array([nf, nf])
 
-"""
-    Return derivative of nf with respect to h
-"""
-def get_d_nf(epsilon, h, dh, t_eff, beta):
-    get_t_eff(U, t, h, J_eff)
-    nf_p = get_nf(epsilon, h + dh/2.0, t_eff, beta)
-    nf_m = get_nf(epsilon, h - dh/2.0, t_eff, beta)
-
-    d_nf = (nf_p - nf_m) / dh
-
-    return d_nf
-
+    return nf_vec
 
 """
     Returns the thermal average of L over the rotor Hamiltonian
 """
-def get_L(U, h, J_eff, beta, l_max, SITE=1):
+def get_L(U, h_vec, J_eff_vec, beta, l_max, SITE=1):
     rotor_dim = (2 * l_max + 1)**2
     basis = get_eff_rotor_basis(l_max)
 
-    H_rotor = get_H_rotor(U, h, J_eff, l_max)
+    H_rotor = get_H_rotor(U, h_vec, J_eff_vec, l_max)
     rotor_energies, rotor_states = np.linalg.eigh(H_rotor)
 
     rotor_energies = rotor_energies - rotor_energies[0]
@@ -216,50 +208,56 @@ def get_L(U, h, J_eff, beta, l_max, SITE=1):
             elif SITE == 1:
                 rotor_sum += l2 * np.abs(state[j])**2
             else:
-                raise ValueError('SITE must be 1 or 2')
+                raise ValueError('get_L: SITE must be 1 or 2')
             
         num_sum += boltzmann * rotor_sum
         den_sum += boltzmann 
 
     L = num_sum / den_sum
-
     return L
 
-
-"""
-    Return derivative of L with respect to h
-"""
-def get_d_L(U, h, dh, J_eff, beta, l_max):
-    L_plus = get_L(U, h + dh/2, J_eff, beta, l_max)
-    L_minus = get_L(U, h - dh/2, J_eff, beta, l_max)
-
-    d_L = (L_plus - L_minus) / dh
-
-    return d_L
-
-
-
-def get_Jac(epsilon, U, t_eff, h, dh, mu, K, beta, l_max, sites):
+def get_Jacobian(epsilon_vec, U, t_eff_mat, h_vec, dh, J_eff_vec, mu_vec, K_vec, beta, l_max):
     """
         Return Jacobian used in Newton's method
     """
-    def get_Jac_nf():
+    def get_Jacobian_nf(epsilon_vec, t_eff_mat, h_vec, dh, beta, mu_vec):
         """
             Returns spinon occupancy contribution to Jacobian 
         """
         J = np.zeros((2,2))
         for j in range(2):
-            h_p, h_m = h.copy(), h.copy()
+            h_p, h_m = h_vec.copy(), h_vec.copy()
             h_p[j] += dh / 2.0
             h_m[j] -= dh / 2.0
 
-            eigvals_p, eigvecs_p = np.linalg.eigh(get_)
-        return
+            nf_p = get_nf_vec(epsilon_vec, h_p, t_eff_mat, beta, mu_vec)
+            nf_m = get_nf_vec(epsilon_vec, h_m, t_eff_mat, beta, mu_vec)
+
+            J[:,j] = (nf_p - nf_m) / dh
+
+        return J
     
-    def get_Jac_L():
+    def get_Jacobian_L(U, h_vec, J_eff_vec, l_max):
         """
             Returns rotor contribution to Jacobian
         """
+        J = np.zeros((2, 2))
+
+        for j in range(2):
+            h_p, h_m = h_vec.copy(), h_vec.copy()
+            h_p[j] += dh / 2.0
+            h_m[j] -= dh / 2.0
+
+            eigvals_p, eigvecs_p = np.linalg.eigh(get_H_rotor(U, h_vec, J_eff_vec, l_max))
+            eigvals_m, eigvecs_m = np.linalg.eigh(get_H_rotor(U, h_p, J_eff_vec, l_max))
+            J_eff_p = get_J_eff
+            L_p = get_L(U, h_vec, J_eff_vec)
+    J_nf = get_Jacobian_nf(epsilon_vec, t_eff_mat, h_vec, dh, beta, mu_vec)
+    J_L = get_Jacobian_L()
+
+    J = J_nf - J_L
+
+    return J
 
 
 """
