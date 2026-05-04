@@ -76,7 +76,7 @@ def get_constraint_operator(site):
     Look at the Latex document to see where I got this.
     An ugly Hamiltonian, it is
 """
-def get_mel(epsilon, U, t, q_nums, q_nums_prime):
+def get_H_mel(epsilon, U, t, q_nums, q_nums_prime):
     n1_up, n1_down, n2_up, n2_down, l1, l2 = q_nums
     n1_up_prime, n1_down_prime, n2_up_prime, n2_down_prime, l1_prime, l2_prime = q_nums_prime
 
@@ -123,7 +123,7 @@ def get_H(epsilon, U, t, basis):
 
         for j in range(dim):
             q_nums_prime = basis[j]
-            H[i,j] = get_mel(epsilon, U, t, q_nums, q_nums_prime)
+            H[i,j] = get_H_mel(epsilon, U, t, q_nums, q_nums_prime)
 
     return H
 

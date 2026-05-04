@@ -14,6 +14,42 @@ import exact_dimer as exact
 warnings.simplefilter("error", RuntimeWarning)
 np.set_printoptions(threshold=sys.maxsize)
 
+'''
+    MASSIVE ERRORS AT WORK
+    NEED FIXING, ROTOR STATES COMPLETELY WRONG
+    SOMETHING IS SERIOUSLY WRONG
+'''
+P0_dimer_states = {
+    '0000': (0,0,0,0)
+}
+
+P1_dimer_states = {
+    '1000': (1,0,0,0),
+    '0100': (0,1,0,0),
+    '0010': (0,0,1,0),
+    '0001': (0,0,0,1)
+}
+
+P2_dimer_states = {
+    '1100': (1,1,0,0),
+    '1010': (1,0,1,0),
+    '1001': (1,0,0,1),
+    '0110': (0,1,1,0),
+    '0101': (0,1,0,1),
+    '0011': (0,0,1,1)
+}
+
+P3_dimer_states = {
+    '1110': (1,1,1,0),
+    '1011': (1,0,1,1),
+    '1101': (1,1,0,1),
+    '0111': (0,1,1,1),
+}
+
+P4_dimer_states = {
+    '1111': (1,1,1,1)
+}
+
 """
     Simulation of a junction with inhomogenous chemical potential with next-nearest-neighbor hopping
 
@@ -169,7 +205,8 @@ def get_H_rotor(U, h, K, l_max, site_idx):
     np.fill_diagonal(H, diag)
 
     off_diag = K[site_idx] / 2.0
-    H += np.diag(np.full(rotor_dim - 1, off_diag), k=1) + np.diag(np.full(rotor_dim - 1, off_diag), k=-1)
+    H += np.diag(np.full(rotor_dim - 1, off_diag), k=1) 
+    H += np.diag(np.full(rotor_dim - 1, off_diag), k=-1)
 
     return H
 
@@ -206,12 +243,13 @@ def get_K(t, Z, spinon_eigvals, spinon_eigvecs, beta, sites):
     return K
 
 def rotor_state_ps(theta, state, l_max):
-    rotor_dim = 2 * l_max + 1
-
+    '''
+        Calculate a rotor state \psi(theta) as a function of angle by projecting onto the e^{i\ell\theta} basis
+    '''
     sum = 0.0j
-    for i in range(rotor_dim):
-        l = i - l_max
-        weight = state[i]
+
+    for l in range(-l_max, l_max+1):
+        weight = state[l + l_max]
         sum += weight * np.exp(l * theta * 1.0j)
 
     return sum 
@@ -375,11 +413,11 @@ def get_spectra(
 """
 def update_params(epsilon, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l_max, sites, N_target=2.0, PBC=False):
     # Small parameters to slow down updates
-    ALPHA_H = 0.1
-    ALPHA_Z = 0.1
-    ALPHA_K = 0.1
-    ALPHA_T_EFF = 0.1
-    ALPHA_MU = 0.1
+    ALPHA_H = 0.05
+    ALPHA_Z = 0.05
+    ALPHA_K = 0.05
+    ALPHA_T_EFF = 0.05
+    ALPHA_MU = 0.05
 
     # Tolerances for when iteration is done
     TOL_H = 1e-12
@@ -446,108 +484,6 @@ def update_params(epsilon, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l
     
     return h_update, Z_update, K_update, t_eff_update, nf, L, mu, num_cycles
 
-def get_E_mel(epsilon_vec, U, t_nn, bra_state, ket_state):
-    """
-        Calcualte the matrix element <{n_i\sigma}|H|n'_{i\sigma}>
-        between two basis kets in the spinon basis
-        Rotor nums are constrained
-    """
-    n1_up, n1_down, n2_up, n2_down = bra_state
-    nf1, nf2 = n1_up + n1_down, n2_up + n2_down
-
-    n1_up_prime, n1_down_prime, n2_up_prime, n2_down_prime = ket_state
-    nf1_prime, nf2_prime = n1_up_prime + n1_down_prime, n2_up_prime + n2_down_prime
-
-    eps1, eps2 = epsilon_vec[0], epsilon_vec[1]
-
-    diag = (
-        (eps1*nf1 + eps2*nf2 + (U/2.0) * ((nf1 - 1)**2 + (nf2 - 1)**2))
-          *helpers.k_delta(n1_up, n1_up_prime)*helpers.k_delta(n1_down, n1_down_prime)
-          *helpers.k_delta(n2_up, n2_up_prime)*helpers.k_delta(n2_down, n2_down_prime)
-    )
-
-
-    off_diag_12 = -t_nn*(
-        ((k_delta(0, n1_up_prime)*k_delta(1,n2_up_prime)
-        *k_delta(n1_up, n1_up_prime+1)*k_delta(n1_down, n1_down_prime)*k_delta(n2_up,n2_up_prime-1)*k_delta(n2_down,n2_down_prime))
-        +(k_delta(0,n1_down_prime)*k_delta(1,n2_up_prime)
-        *k_delta(n1_up,n1_up_prime)*k_delta(n1_down,n1_down_prime+1)*k_delta(n2_up,n2_up_prime)*k_delta(n2_down,n2_down_prime-1)))
-        *k_delta(nf1-1,nf1_prime)*k_delta(nf2-1,nf2_prime-2)
-    )
-
-    off_diag_21 = -t_nn*(
-        ((k_delta(0, n2_up_prime)*k_delta(1,n1_up_prime)
-        *k_delta(n2_up, n2_up_prime+1)*k_delta(n2_down, n2_down_prime)*k_delta(n1_up,n1_up_prime-1)*k_delta(n1_down,n1_down_prime))
-        +(k_delta(0,n2_down_prime)*k_delta(1,n1_up_prime)
-        *k_delta(n2_up,n2_up_prime)*k_delta(n2_down,n2_down_prime+1)*k_delta(n1_up,n1_up_prime)*k_delta(n1_down,n1_down_prime-1)))
-        *k_delta(nf2-1,nf2_prime)*k_delta(nf1-1,nf1_prime-2)
-    )
-
-    mel = diag + off_diag_12 + off_diag_21
-    print(f'U: {U}')
-    print(f'bra: <{bra_state}|')
-    print(f'ket: |{ket_state}>\n')
-    print(f'mel: {mel}')
-    print(f'diag: {diag}')
-    print(f'off_diag_12: {off_diag_12}')
-    print(f'off_diag_21: {off_diag_21}\n\n')
-    return mel
-
-def get_E_dimer_phys(epsilon_vec, U, t_nn, rotor1, rotor2, l_max):
-    """
-        Returns 4 energies corresponding to the constrained tensor product |\psi_f>|\psi_{theta,1}>|\psi_{theta,2}>
-        where |\psi_f> takes on 1 of the 4 calculated eigenkets for the spinon Hamiltonian
-        This is highly specific to the homogeneous dimer problem
-    """
-    half_filling_states = {
-        '1100': (1,1,0,0),
-        '1010': (1,0,1,0),
-        '1001': (1,0,0,1),
-        '0110': (0,1,1,0),
-        '0101': (0,1,0,1),
-        '0011': (0,0,1,1)
-    }
-
-    spinon1 = [(0.5,'1100'), (0.5,'0110'), (0.5,'1001'), (0.5,'0011')]
-    spinon2 = [(0.5,'1100'), (0.5,'0110'), (-0.5,'1001'), (-0.5,'0011')]
-    spinon3 = [(0.5,'1100'), (-0.5,'0110'), (0.5,'1001'), (-0.5,'0011')]
-    spinon4 = [(0.5,'1100'), (-0.5,'0110'), (-0.5,'1001'), (0.5,'0011')]
-
-    E1, E2, E3, E4 = 0.0, 0.0, 0.0, 0.0
-    for i in range(4):
-        bra_weight, bra_state = spinon1[i]
-        bra_nums = half_filling_states[bra_state]
-
-        bra_nf1 = bra_nums[0] + bra_nums[1]
-        bra_nf2 = bra_nums[2] + bra_nums[3]
-
-        bra_l1 = l_max + bra_nf1 - 1
-        bra_l2 = l_max + bra_nf2 - 1
-
-        for j in range(4):
-            ket_weight, ket_state = spinon1[j]
-            ket_nums = half_filling_states[ket_state]
-
-            ket_nf1 = ket_nums[0] + ket_nums[1]
-            ket_nf2 = ket_nums[2] + ket_nums[3]
-
-            ket_l1 = l_max + ket_nf1 - 1
-            ket_l2 = l_max + ket_nf2 - 1
-
-            mel = get_E_mel(epsilon_vec, U, t_nn, bra_nums, ket_nums)
-            E_weight = bra_weight * ket_weight * np.conj(rotor1[bra_l1]) * rotor1[ket_l1] * np.conj(rotor2[bra_l2]) * rotor2[ket_l2]
-
-            '''
-            print(f'rotor1_bra_l1 weight: {rotor1[bra_l1]}')
-            print(f'rotor1_bra_l2 weight: {rotor1[bra_l2]}')
-            print(f'rotor1_ket_l1 weight: {rotor1[ket_l1]}')
-            print(f'rotor1_ket_l2 weight: {rotor1[ket_l2]}')
-            print(f'E1: {E1}')
-            '''
-            E1 += mel * E_weight
-            #print(f'Energy: {E1}')
-    return E1
-
 if __name__ == '__main__':
     PBC = True
     plot_spinon_spectral = True
@@ -558,7 +494,7 @@ if __name__ == '__main__':
     half_sites = int(sites/2.0)
     N_target = int(1.0*sites) #Half filling
 
-    l_max = 20
+    l_max = 2
     l_vals = np.arange(-l_max, l_max + 1)
 
     # Add nearest-neighbor hopping
@@ -586,13 +522,10 @@ if __name__ == '__main__':
     """
     t_eff_guess = 0.8 * t
     h_guess = -epsilon_vec
-    h_doped_guess = -epsilon_doped
     Z_guess = np.full(sites, 0.5)
     K_guess = np.full(sites,-1.5)
 
-    omega_vals = np.linspace(-10,10,20000)
-
-    U_vals = np.linspace(0.0,1.0,10)
+    U_vals = np.linspace(0.1,2.0,20)
     beta = 50.0
 
     energies_exact = [[] for _ in range(6)]
@@ -609,22 +542,34 @@ if __name__ == '__main__':
 
         h, Z, K, t_eff, nf, L, mu, num_cycles = update_params(epsilon_vec, t, U, t_eff_guess, h_guess, Z_guess, K_guess, beta, l_max, sites, N_target)
 
+        print(f'U: {U}')
+        print(f'h: {h}')
+        print(f'Z: {Z}')
+        print(f'K: {K}')
+        print(f't_eff: {t_eff}')
+        print(f'nf: {nf}')
+        print(f'L: {L}')
+        print(f'mu: {mu}\n\n')
+
         H_rotor = get_H_rotor(U, h, K, l_max, 0)
+        print(f'Converged H_rotor: {H_rotor}')
         eigvals_rotor, eigvecs_rotor = np.linalg.eigh(H_rotor)
         
         rotor1 = eigvecs_rotor[0]
         rotor2 = eigvecs_rotor[0]
 
-        '''
-        for i in range(2*l_max + 1):
-            plotting.plot_rotor_weight(eigvecs_rotor[i], 0, epsilon_vec[0], 0, l_max)
-        '''
-        print(f'rotor1: {rotor1}')
-        energy = get_E_dimer_phys(epsilon_vec, U, t_nn, rotor1, rotor2, l_max)
-        energies_mf[0].append(energy)
-        count += 1
-        print(count)
+        print(rotor1)
+        theta_vals = np.linspace(0,2*np.pi,100)
+        rotor_ps_vals = [np.abs(rotor_state_ps(theta, rotor1, l_max)) for theta in theta_vals]
 
+        plt.figure()
+        plt.plot(theta_vals, rotor_ps_vals)
+        plt.xlabel(r'$\theta$')
+        plt.ylabel(r'$\psi_{\theta}$')
+        plt.show()
+
+        # energy = get_E_dimer_phys(epsilon_vec, U, 2*t_nn, rotor1, rotor2, l_max)
+        # energies_mf[0].append(energy)
 
     plt.figure()
 
