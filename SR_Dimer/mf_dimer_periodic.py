@@ -319,7 +319,7 @@ def get_E_mel(epsilon_vec, U, t_nn, bra_state, ket_state):
         *k_delta(n1_up, n1_up_prime+1)*k_delta(n1_down, n1_down_prime)*k_delta(n2_up,n2_up_prime-1)*k_delta(n2_down,n2_down_prime))
         +(k_delta(0,n1_down_prime)*k_delta(1,n2_up_prime)
         *k_delta(n1_up,n1_up_prime)*k_delta(n1_down,n1_down_prime+1)*k_delta(n2_up,n2_up_prime)*k_delta(n2_down,n2_down_prime-1)))
-        *k_delta(nf1-1,nf1_prime)*k_delta(nf2-1,nf2_prime-2)
+        *k_delta(nf1,nf1_prime+1)*k_delta(nf2,nf2_prime-1)
     )
 
     off_diag_21 = -t_nn*(
@@ -327,7 +327,7 @@ def get_E_mel(epsilon_vec, U, t_nn, bra_state, ket_state):
         *k_delta(n2_up, n2_up_prime+1)*k_delta(n2_down, n2_down_prime)*k_delta(n1_up,n1_up_prime-1)*k_delta(n1_down,n1_down_prime))
         +(k_delta(0,n2_down_prime)*k_delta(1,n1_up_prime)
         *k_delta(n2_up,n2_up_prime)*k_delta(n2_down,n2_down_prime+1)*k_delta(n1_up,n1_up_prime)*k_delta(n1_down,n1_down_prime-1)))
-        *k_delta(nf2-1,nf2_prime)*k_delta(nf1-1,nf1_prime-2)
+        *k_delta(nf2,nf2_prime+1)*k_delta(nf1,nf1_prime-1)
     )
 
     mel = diag + off_diag_12 + off_diag_21
@@ -368,59 +368,46 @@ def construct_phys_states(spinon, rotor1, rotor2, l_max):
     
     return phys
 
-
 def get_E_dimer_phys(epsilon_vec, U, t_nn, rotor1, rotor2, l_max):
     """
         Returns 4 energies corresponding to the constrained tensor product |\psi_f>|\psi_{theta,1}>|\psi_{theta,2}>
         where |\psi_f> takes on 1 of the 4 calculated eigenkets for the spinon Hamiltonian
         This is highly specific to the homogeneous dimer problem
     """
-    spinon1 = [(1/np.sqrt(2), '1100'), (-1/np.sqrt(2), '0011')]
-    spinon1 = [(0.5,'1100'), (0.5,'0110'), (0.5,'1001'), (0.5,'0011')]
-    spinon2 = [(0.5,'1100'), (0.5,'0110'), (-0.5,'1001'), (-0.5,'0011')]
-    spinon3 = [(0.5,'1100'), (-0.5,'0110'), (0.5,'1001'), (-0.5,'0011')]
-    spinon4 = [(0.5,'1100'), (-0.5,'0110'), (-0.5,'1001'), (0.5,'0011')]
+    E5 = 0.5*(U - np.sqrt(16*t_nn**2+U**2))
+    d = E5/(2*t_nn)
+    c1 = 1/np.sqrt(1+1+2*d**2)
+    c2 = d/c1
+    spinon1 = [(c1, '1100'), (c1, '0011'), (c2, '1001'), (c2,'0110')]
 
-    phys1 = construct_phys_states(spinon4, rotor1, rotor2, l_max)
-    phys2 = construct_phys_states(spinon2, rotor1, rotor2, l_max)
-    phys3 = construct_phys_states(spinon3, rotor1, rotor2, l_max)
-    phys4 = construct_phys_states(spinon4, rotor1, rotor2, l_max)
-          
-    E1 = 0.0
+    #spinon1 = [(0.5,'1100'), (0.5,'0110'), (0.5,'1001'), (0.5,'0011')]
+    #spinon2 = [(0.5,'1100'), (0.5,'0110'), (-0.5,'1001'), (-0.5,'0011')]
+    #spinon3 = [(0.5,'1100'), (-0.5,'0110'), (0.5,'1001'), (-0.5,'0011')]
+    #spinon4 = [(0.5,'1100'), (-0.5,'0110'), (-0.5,'1001'), (0.5,'0011')]
 
-    for i in range(len(phys1)):
-        bra_weight, bra_state = phys1[i]
-        bra_nums = P2_dimer_states[bra_state]
+    phys1 = construct_phys_states(spinon1, rotor1, rotor2, l_max)
+        
+    phys_states = [phys1]
+    phys_energies = [0.0 for _ in range(len(phys_states))]
 
-        bra_nf1 = bra_nums[0] + bra_nums[1]
-        bra_nf2 = bra_nums[2] + bra_nums[3]
-
-        bra_l1 = l_max + bra_nf1 - 1
-        bra_l2 = l_max + bra_nf2 - 1
+    for i in range(len(phys_states)):
+        phys_state = phys_states[i]
+        E = 0.0
 
         for j in range(len(phys1)):
-            ket_weight, ket_state = phys1[j]
-            ket_nums = P2_dimer_states[ket_state]
+            bra_weight, bra_state = phys_state[j]
+            bra_nums = P2_dimer_states[bra_state]
 
-            ket_nf1 = ket_nums[0] + ket_nums[1]
-            ket_nf2 = ket_nums[2] + ket_nums[3]
+            for k in range(len(phys1)):
+                ket_weight, ket_state = phys_state[k]
+                ket_nums = P2_dimer_states[ket_state]
 
-            ket_l1 = l_max + ket_nf1 - 1
-            ket_l2 = l_max + ket_nf2 - 1
+                mel = get_E_mel(epsilon_vec, U, t_nn, bra_nums, ket_nums)
+                E += mel * np.conj(bra_weight) * ket_weight
 
-            mel = get_E_mel(epsilon_vec, U, t_nn, bra_nums, ket_nums)
-            E_weight = bra_weight * ket_weight * np.conj(rotor1[bra_l1]) * rotor1[ket_l1] * np.conj(rotor2[bra_l2]) * rotor2[ket_l2]
+        phys_energies[i] = E
 
-            '''
-            print(f'rotor1_bra_l1 weight: {rotor1[bra_l1]}')
-            print(f'rotor1_bra_l2 weight: {rotor1[bra_l2]}')
-            print(f'rotor1_ket_l1 weight: {rotor1[ket_l1]}')
-            print(f'rotor1_ket_l2 weight: {rotor1[ket_l2]}')            
-            print(f'E1: {E1}')
-            '''
-            E1 += mel * E_weight
-
-    return E1
+    return phys_energies
 
 if __name__ == '__main__':
     l_max = 20
@@ -439,7 +426,7 @@ if __name__ == '__main__':
     K_vec_guess = np.full(2,-1.0)
 
     energies_exact = [[] for _ in range(6)]
-    energies_mf = [[]]
+    energies_mf = [[] for _ in range(1)]
 
     U_vals = np.linspace(0.0,3.0,100)
 
@@ -456,12 +443,12 @@ if __name__ == '__main__':
         rotor1_evecs = rotor_evecs_vec[0]
         rotor2_evecs = rotor_evecs_vec[1]
 
-        rotor1 = rotor1_evecs[:,l_max]
-        rotor2 = rotor2_evecs[:,l_max]
+        rotor1 = rotor1_evecs[:,0]
+        rotor2 = rotor2_evecs[:,0]
 
-        energy_mf = get_E_dimer_phys(epsilon_vec, U, t_nn, rotor1, rotor2, l_max)
-        energies_mf[0].append(energy_mf)
-        print('done')
+        energies_mf_vec = get_E_dimer_phys(epsilon_vec, U, 2*t_nn, rotor1, rotor2, l_max)
+        for i in range(len(energies_mf_vec)):
+            energies_mf[i].append(energies_mf_vec[i])
 
     plt.figure()
 
