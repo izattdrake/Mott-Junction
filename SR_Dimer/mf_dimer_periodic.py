@@ -374,9 +374,9 @@ def get_E_dimer_phys(epsilon_vec, U, t_nn, rotor1, rotor2, l_max):
         where |\psi_f> takes on 1 of the 4 calculated eigenkets for the spinon Hamiltonian
         This is highly specific to the homogeneous dimer problem
     """
-    E5 = 0.5*(U - np.sqrt(16*t_nn**2+U**2))
+    E5 = 0.5*(U - np.sqrt(16*t_nn**2 + U**2))
     d = E5/(2*t_nn)
-    c1 = 1/np.sqrt(1+1+2*d**2)
+    c1 = 1/np.sqrt(2 + 2 * d**2)
     c2 = d/c1
     spinon1 = [(c1, '1100'), (c1, '0011'), (c2, '1001'), (c2,'0110')]
 
