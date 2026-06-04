@@ -151,7 +151,8 @@ def get_Jacobian(epsilon_vec, U, t_eff_mat, h_vec, dh, mu, K_vec, beta, l_max):
             h_p, h_m = h_vec.copy(), h_vec.copy()
             h_p[j] += dh/2
             h_m[j] -= dh/2
-
+            
+            # May need to calculate K_vec_p, K_vec_m
             evals_p, evecs_p = np.linalg.eigh(get_H_rotor(U, h_p, K_vec, l_max, j))
             evals_m, evecs_m = np.linalg.eigh(get_H_rotor(U, h_m, K_vec, l_max, j))
             
@@ -252,10 +253,10 @@ def update_params(epsilon_vec, t_mat, U, t_eff_mat_guess, h_vec_guess, Z_vec_gue
         rotor_eigvals_vec, rotor_eigvecs_vec = get_rotor_eig_vec(U, h_vec, K_vec, l_max)
 
         # Calculate nf and L for Jacobian
-        nf = get_nf_vec(spinon_eigvals, spinon_eigvecs, beta)
-        L = get_L_vec(rotor_eigvals_vec, rotor_eigvecs_vec, beta, l_max)
+        nf_vec = get_nf_vec(spinon_eigvals, spinon_eigvecs, beta)
+        L_vec = get_L_vec(rotor_eigvals_vec, rotor_eigvecs_vec, beta, l_max)
 
-        f = nf - L - N_AT / 2.0
+        f = nf_vec - L_vec - N_AT / 2.0
         jac = get_Jacobian(epsilon_vec, U, t_eff_mat, h_vec, dh, mu, K_vec, beta, l_max)
 
         try:
@@ -264,7 +265,7 @@ def update_params(epsilon_vec, t_mat, U, t_eff_mat_guess, h_vec_guess, Z_vec_gue
             sys.exit('FAILURE: SINGULAR JACOBIAN')
 
         # Adjust total particle number
-        N = np.sum(nf)
+        N = np.sum(nf_vec)
         mu += ALPHA_MU * (N_target - N)
 
         # Update parameters
@@ -288,10 +289,10 @@ def update_params(epsilon_vec, t_mat, U, t_eff_mat_guess, h_vec_guess, Z_vec_gue
     spinon_eigvals, spinon_eigvecs = np.linalg.eigh(get_H_spinon(epsilon_vec, t_eff_mat_update, h_vec_update, mu))
     rotor_eigvals_vec, rotor_eigvecs_vec = get_rotor_eig_vec(U, h_vec_update, K_vec_update, l_max)
 
-    nf = get_nf_vec(spinon_eigvals, spinon_eigvecs, beta)
-    L = get_L_vec(rotor_eigvals_vec, rotor_eigvecs_vec, beta, l_max)
+    nf_vec = get_nf_vec(spinon_eigvals, spinon_eigvecs, beta)
+    L_vec = get_L_vec(rotor_eigvals_vec, rotor_eigvecs_vec, beta, l_max)
 
-    return h_vec_update, Z_vec_update, K_vec_update, t_eff_mat, nf, L, num_cycles
+    return h_vec_update, Z_vec_update, K_vec_update, t_eff_mat, nf_vec, L_vec, num_cycles
 
 def get_E_mel(epsilon_vec, U, t_nn, bra_state, ket_state):
     """
@@ -314,7 +315,7 @@ def get_E_mel(epsilon_vec, U, t_nn, bra_state, ket_state):
     )
 
 
-    off_diag_12 = -t_nn*(
+    off_diag_12 = -2*t_nn*(
         ((k_delta(0, n1_up_prime)*k_delta(1,n2_up_prime)
         *k_delta(n1_up, n1_up_prime+1)*k_delta(n1_down, n1_down_prime)*k_delta(n2_up,n2_up_prime-1)*k_delta(n2_down,n2_down_prime))
         +(k_delta(0,n1_down_prime)*k_delta(1,n2_up_prime)
@@ -322,7 +323,7 @@ def get_E_mel(epsilon_vec, U, t_nn, bra_state, ket_state):
         *k_delta(nf1,nf1_prime+1)*k_delta(nf2,nf2_prime-1)
     )
 
-    off_diag_21 = -t_nn*(
+    off_diag_21 = -2*t_nn*(
         ((k_delta(0, n2_up_prime)*k_delta(1,n1_up_prime)
         *k_delta(n2_up, n2_up_prime+1)*k_delta(n2_down, n2_down_prime)*k_delta(n1_up,n1_up_prime-1)*k_delta(n1_down,n1_down_prime))
         +(k_delta(0,n2_down_prime)*k_delta(1,n1_up_prime)
@@ -378,16 +379,19 @@ def get_E_dimer_phys(epsilon_vec, U, t_nn, rotor1, rotor2, l_max):
     d = E5/(2*t_nn)
     c1 = 1/np.sqrt(2 + 2 * d**2)
     c2 = d/c1
-    spinon1 = [(c1, '1100'), (c1, '0011'), (c2, '1001'), (c2,'0110')]
+    #spinon1 = [(c1, '1100'), (c1, '0011'), (c2, '1001'), (c2,'0110')]
 
-    #spinon1 = [(0.5,'1100'), (0.5,'0110'), (0.5,'1001'), (0.5,'0011')]
-    #spinon2 = [(0.5,'1100'), (0.5,'0110'), (-0.5,'1001'), (-0.5,'0011')]
-    #spinon3 = [(0.5,'1100'), (-0.5,'0110'), (0.5,'1001'), (-0.5,'0011')]
-    #spinon4 = [(0.5,'1100'), (-0.5,'0110'), (-0.5,'1001'), (0.5,'0011')]
+    spinon1 = [(0.5,'1100'), (0.5,'0110'), (0.5,'1001'), (0.5,'0011')]
+    spinon2 = [(0.5,'1100'), (0.5,'0110'), (-0.5,'1001'), (-0.5,'0011')]
+    spinon3 = [(0.5,'1100'), (-0.5,'0110'), (0.5,'1001'), (-0.5,'0011')]
+    spinon4 = [(0.5,'1100'), (-0.5,'0110'), (-0.5,'1001'), (0.5,'0011')]
 
     phys1 = construct_phys_states(spinon1, rotor1, rotor2, l_max)
-        
-    phys_states = [phys1]
+    phys2 = construct_phys_states(spinon2, rotor1, rotor2, l_max)
+    phys3 = construct_phys_states(spinon3, rotor1, rotor2, l_max)
+    phys4 = construct_phys_states(spinon4, rotor1, rotor2, l_max)
+
+    phys_states = [phys1, phys2, phys3, phys4]
     phys_energies = [0.0 for _ in range(len(phys_states))]
 
     for i in range(len(phys_states)):
@@ -405,12 +409,12 @@ def get_E_dimer_phys(epsilon_vec, U, t_nn, rotor1, rotor2, l_max):
                 mel = get_E_mel(epsilon_vec, U, t_nn, bra_nums, ket_nums)
                 E += mel * np.conj(bra_weight) * ket_weight
 
-        phys_energies[i] = E
+        phys_energies[i] = E + U
 
     return phys_energies
 
 if __name__ == '__main__':
-    l_max = 20
+    l_max = 40
     rotor_dim = 2 * l_max + 1
 
     N_target = 2
@@ -426,7 +430,7 @@ if __name__ == '__main__':
     K_vec_guess = np.full(2,-1.0)
 
     energies_exact = [[] for _ in range(6)]
-    energies_mf = [[] for _ in range(1)]
+    energies_mf = [[] for _ in range(4)]
 
     U_vals = np.linspace(0.0,3.0,100)
 
