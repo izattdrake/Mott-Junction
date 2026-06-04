@@ -23,6 +23,7 @@ P4_L_VALS = [(1,1)]
     Good problem to bridge the gap between the exact and mean-field problems
 """
 
+    
 def get_eff_rotor_basis(l_max):
     """
         Returns |l_1 l_2> basis elements
@@ -142,8 +143,16 @@ def get_spinon_from_gamma():
     return 
 
 """
-    Return gamma-particle energies
+    Return gamma particle energies in a tuple
 """
+def get_E_pm(epsilon_vec, h_vec):
+    E1_eff, E2_eff = epsilon_vec - h_vec
+
+    delta = E1_eff - E2_eff
+    theta = np.arctan(2*t_eff/delta)
+    Delta = np.sqrt((2 * t_eff)**2 + delta**2)
+
+    E_p, E_m = 0.5 * (E1_eff + E2_eff + Delta), 0.5 * (E1_eff - E2_eff - Delta)
 def get_E_plus(epsilon, h, t_eff):
     E_plus = epsilon - h - t_eff
     return E_plus
