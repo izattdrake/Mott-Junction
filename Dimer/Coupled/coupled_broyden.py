@@ -102,11 +102,6 @@ def update_params(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_guess, beta
         N = np.sum(nf_vec)
         mu += ALPHA_MU * (N_target - N)
  
-        # ---------------------------------------------------------------------
-        # Modified Broyden step on h (replaces the Newton step).  The full
-        # constraint residual is used -- the redundant uniform/charge direction
-        # is NOT removed; the w0 regularization absorbs it.
-        # ---------------------------------------------------------------------
         delta_h = modified_broyden_step(f_vec, h_vec, ALPHA_H, WEIGHT,
                                         dF_hist, u_hist, h_prev, f_prev)
         if len(dF_hist) > MEMORY:
