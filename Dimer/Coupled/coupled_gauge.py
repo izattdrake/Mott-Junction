@@ -36,12 +36,12 @@ from Dimer.Coupled.core import (
 
 def gauge_fixed_newton_step(jacobian, f):
     """
-        Constructs a Newton step outside the null/gauge subspace
-        
-        1. Assume the gauge direction is along the total charge vector (1,1,...,1)
-        2. Construct a projection operator P = I - u^Tu
-        3. Project the null space out of f, J
-        4. Solve the matrix equation for delta_h with pseudo inverse
+    Constructs a Newton step outside the null/gauge subspace
+    
+    1. Assume the gauge direction is along the total charge vector (1,1,...,1)
+    2. Construct a projection operator P = I - u^Tu
+    3. Project the null space out of f, J
+    4. Solve the matrix equation for delta_h with pseudo inverse
     """
     N = f.size
  
@@ -60,9 +60,9 @@ def gauge_fixed_newton_step(jacobian, f):
  
 def gauge_projected_residual(f):
     """
-        Norm of the residual with the gauge component removed.
-        This is the quantity that should actually go to zero.
-        The uniform part of f is enforced by mu, not h.
+    Norm of the residual with the gauge component removed.
+    This is the quantity that should actually go to zero.
+    The uniform part of f is enforced by mu, not h.
     """
     N = f.size
     u = np.ones(N) / np.sqrt(N)
@@ -84,7 +84,7 @@ def update_params(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_guess, beta
     TOL_T_EFF = 1e-8
     TOL_J_EFF = 1e-8
     TOL_N  = 1e-6
-    TOL_STAG = 1e-8
+    TOL_PHYS_F = 1e-8
  
     mu = 0.0 # Global chemical potential
     dh = 1e-5 # Finite difference step
@@ -104,10 +104,8 @@ def update_params(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_guess, beta
         L_vec = get_L_vec(rotor_evals, rotor_evecs, beta, l_max)
  
         f_vec = nf_vec - L_vec - 1.0
+        phys_f_norm = gauge_projected_residual(f_vec) # Residual that must vanish | Equals |f1 - f2| for the dimer.
         jacobian = get_Jacobian(U, epsilon_vec, h_vec, dh, t_eff, J_eff, beta, l_max, mu)
- 
-        N = np.sum(nf_vec)
-        mu += ALPHA_MU * (N_target - N)
  
         # Gauge-fixed Newton's method | h1 + h2 held fixed
         try:
@@ -115,25 +113,25 @@ def update_params(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_guess, beta
         except np.linalg.LinAlgError:
             print('ERROR: SINGULAR JACOBIAN')
             print(f'U: {U}')
+            print(f'beta: {beta}')
             print(f'N: {N_target}')
             print(f'epsilon_vec: {epsilon_vec}')
             sys.exit()
 
+ 
         h_vec_update = h_vec + ALPHA_H * delta_h
- 
-        # Residual that must vanish | Equals |f1 - f2| for the dimer.
-        stag_resid = gauge_projected_residual(f_vec)
- 
-        # Picard (damped) mixing for the effective amplitudes (unchanged)
         t_eff_update = (1 - ALPHA_T_EFF) * t_eff + ALPHA_T_EFF * get_t_eff(rotor_evals, rotor_evecs, t, beta, l_max)
         J_eff_update = (1 - ALPHA_J_EFF) * J_eff + ALPHA_J_EFF * get_J_eff(spinon_evals, spinon_evecs, t, beta)
+ 
+        N = np.sum(nf_vec)
+        mu += ALPHA_MU * (N_target - N)
  
         did_converge = (
             np.allclose(h_vec_update, h_vec, atol=TOL_H) and
             np.allclose(t_eff_update, t_eff, atol=TOL_T_EFF) and
             np.allclose(J_eff_update, J_eff, atol=TOL_J_EFF) and
             np.allclose(N, N_target, atol=TOL_N) and
-            stag_resid < TOL_STAG
+            phys_f_norm < TOL_PHYS_F
         )
  
         count += 1
@@ -155,6 +153,7 @@ if __name__ == '__main__':
 
     U_vals = [0.0, 0.5, 1.0]
     beta = 50.0 # beta=50.0 is zero temperature
+    N_target = 2.0
 
     t = 1.0
     epsilon_vec = np.array([0.0,0.0])
@@ -163,10 +162,11 @@ if __name__ == '__main__':
     J_eff_guess = 0.95 * t   
  
     for U in U_vals: 
-        h_vec, t_eff, J_eff, mu, nf_vec, L_vec, count = update_params(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_guess, beta, l_max, N_target=2.0)
+        h_vec, t_eff, J_eff, mu, nf_vec, L_vec, count = update_params(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_guess, beta, l_max, N_target)
  
         print(f'NEWTON (GAUGE)')
         print(f'U: {U}')
+        print(f'N: {N_target}')
         print(f'epsilon_vec: {epsilon_vec}')
         print(f'h_vec: {h_vec}')
         print(f't_eff: {t_eff}')

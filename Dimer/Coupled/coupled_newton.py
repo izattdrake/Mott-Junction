@@ -1,13 +1,12 @@
 import numpy as np
 import sys 
 
-from core import (
+from Dimer.Coupled.core import (
     get_H_spinon,
     get_t_eff,
     get_nf_vec,
     get_H_rotor,
     get_J_eff,
-    get_L,
     get_L_vec,
     get_Jacobian
 )
@@ -30,8 +29,7 @@ from core import (
 
 def update_params(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_guess, beta, l_max, N_target=2.0):
     """
-        Iterate over parameters until convergence
-        Code isn't pretty due to having to redundantly define parameters at some point, but it gets the job done
+    Iterate over parameters until convergence
     """
     MAX_ITER = 1000
 
@@ -47,6 +45,7 @@ def update_params(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_guess, beta
 
     mu = 0.0 # Global chemical potential for total particle number
     dh = 1e-5
+
     did_converge = False
     count = 1
 
@@ -74,14 +73,14 @@ def update_params(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_guess, beta
             print(f'epsilon_vec: {epsilon_vec}')
             sys.exit()
 
+        # Newton's method
+        h_vec_update = h_vec + ALPHA_H * delta_h
+        t_eff_update = (1 - ALPHA_T_EFF) * t_eff + ALPHA_T_EFF * get_t_eff(rotor_evals, rotor_evecs, t, beta, l_max)
+        J_eff_update = (1 - ALPHA_J_EFF) * J_eff + ALPHA_J_EFF * get_J_eff(spinon_evals, spinon_evecs, t, beta)
+ 
         N = np.sum(nf_vec)
         mu += ALPHA_MU * (N_target - N)
 
-        # Newton's method
-        h_vec_update = h_vec + ALPHA_H * delta_h
-
-        t_eff_update = (1 - ALPHA_T_EFF) * t_eff + ALPHA_T_EFF * get_t_eff(rotor_evals, rotor_evecs, t, beta, l_max)
-        J_eff_update = (1 - ALPHA_J_EFF) * J_eff + ALPHA_J_EFF * get_J_eff(spinon_evals, spinon_evecs, t, beta)
         did_converge = (
             np.allclose(h_vec_update, h_vec, atol=TOL_H) and
             np.allclose(t_eff_update, t_eff, atol=TOL_T_EFF) and
@@ -95,6 +94,7 @@ def update_params(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_guess, beta
         print(f'ERROR: DID NOT CONVERGE AFTER {MAX_ITER} ITERATIONS')
         sys.exit()
 
+    # Calculate nf, L with final Hamiltonians before return
     spinon_evals, spinon_evecs = np.linalg.eigh(get_H_spinon(epsilon_vec, h_vec, t_eff, mu))
     rotor_evals, rotor_evecs = np.linalg.eigh(get_H_rotor(U, h_vec, J_eff, l_max))
 
@@ -108,6 +108,7 @@ if __name__ == '__main__':
 
     U_vals = [0.0, 0.5, 1.0]
     beta = 50.0 # beta=50.0 is zero temperature
+    N_target = 2.0
 
     t = 1.0
     epsilon_vec = np.array([0.0,0.0])
@@ -116,10 +117,11 @@ if __name__ == '__main__':
     J_eff_guess = 0.95 * t   
 
     for U in U_vals:
-        h_vec, t_eff, J_eff, mu, nf_vec, L_vec, count = update_params(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_guess, beta, l_max, N_target=2.0)
+        h_vec, t_eff, J_eff, mu, nf_vec, L_vec, count = update_params(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_guess, beta, l_max, N_target)
 
         print(f'NEWTON (NAIVE)')
         print(f'U: {U}')
+        print(f'beta: {beta}')
         print(f'epsilon_vec: {epsilon_vec}')
         print(f'h_vec: {h_vec}')
         print(f't_eff: {t_eff}')

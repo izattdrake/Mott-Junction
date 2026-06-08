@@ -64,17 +64,17 @@ def update_params(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_guess, beta
     ALPHA_T_EFF = 0.1
     ALPHA_J_EFF = 0.1
     ALPHA_MU = 0.1
- 
-    # Modified-Broyden control parameters
-    WEIGHT = 0.01  
-    MEMORY = 8 # Number of saved cycles, can be increased depending on PC and crystal size
- 
+  
     TOL_H = 1e-8
     TOL_T_EFF = 1e-8
     TOL_J_EFF = 1e-8
     TOL_N  = 1e-6
     TOL_F = 1e-8
  
+    # Modified-Broyden control parameters
+    WEIGHT = 1e-2
+    MEMORY = 8
+
     mu = 0.0 # Global chemical potential 
     
     # Modified-Broyden history for the constraint residual f = n - <L> - 1.
@@ -98,10 +98,6 @@ def update_params(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_guess, beta
         L_vec = get_L_vec(rotor_evals, rotor_evecs, beta, l_max)
  
         f_vec = nf_vec - L_vec - 1.0
- 
-        N = np.sum(nf_vec)
-        mu += ALPHA_MU * (N_target - N)
- 
         delta_h = modified_broyden_step(f_vec, h_vec, ALPHA_H, WEIGHT,
                                         dF_hist, u_hist, h_prev, f_prev)
         if len(dF_hist) > MEMORY:
@@ -115,6 +111,9 @@ def update_params(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_guess, beta
         # Picard (damped) mixing for the effective amplitudes (unchanged)
         t_eff_update = (1 - ALPHA_T_EFF) * t_eff + ALPHA_T_EFF * get_t_eff(rotor_evals, rotor_evecs, t, beta, l_max)
         J_eff_update = (1 - ALPHA_J_EFF) * J_eff + ALPHA_J_EFF * get_J_eff(spinon_evals, spinon_evecs, t, beta)
+ 
+        N = np.sum(nf_vec)
+        mu += ALPHA_MU * (N_target - N)
  
         did_converge = (
             np.allclose(h_vec_update, h_vec, atol=TOL_H) and
@@ -144,7 +143,7 @@ if __name__ == '__main__':
 
     U_vals = [0.0, 0.5, 1.0]
     beta = 50.0 # beta=50.0 is zero temperature
-
+    N_target = 2.0
     t = 1.0
     epsilon_vec = np.array([0.0,0.0])
     h_vec_guess = -epsilon_vec
@@ -152,10 +151,11 @@ if __name__ == '__main__':
     J_eff_guess = 0.95 * t   
 
     for U in U_vals: 
-        h_vec, t_eff, J_eff, mu, nf_vec, L_vec, count = update_params(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_guess, beta, l_max, N_target=2.0)
+        h_vec, t_eff, J_eff, mu, nf_vec, L_vec, count = update_params(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_guess, beta, l_max, N_target)
  
         print(f'MODIFIED BROYDEN')
         print(f'U: {U}')
+        print(f'N: {N_target}')
         print(f'epsilon_vec: {epsilon_vec}')
         print(f'h_vec: {h_vec}')
         print(f't_eff: {t_eff}')

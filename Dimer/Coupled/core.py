@@ -6,19 +6,19 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from utility import helpers
+from Utility import helpers
 
 # ====================================================================
 #   CORE FUNCTIONALITY FOR COUPLED ROTOR PROBLEM ON A HUBBARD DIMER
 # --------------------------------------------------------------------
 #   A mean-field approximation is made on the exact slave rotor
-#   Hubbard Hamiltoniain, giving a spinon and rotor Hamiltonian
+#   Hubbard Hamiltoniain, giving a spinon and rotor Hamiltonian.
 #   In the standard literature for larger crystals, a further
 #   approximation is made to decoupled neighboring rotors
-#   Otherwise the Hilbert space grows exponentially
+#   Otherwise the Hilbert space grows exponentially.
 #   
 #   A Hubbard dimer is still small enough that we can keep the rotors
-#   coupled and solve the problem in reasonable time
+#   coupled and solve the problem in reasonable time.
 # --------------------------------------------------------------------
 #   In this model, rotor states are superpositions of basis states
 #   |l1,l2> = |l1>x|l2>. The rotor tunneling element 
