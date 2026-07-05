@@ -27,7 +27,7 @@ from Dimer.Coupled.core import (
 #   is pure gauge. That is done in coupled_gauge.py. 
 # ====================================================================
 
-def update_params(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_guess, beta, l_max, N_target=2.0):
+def coupled_naive_params(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_guess, beta, l_max, N_target=2.0):
     """
     Iterate over parameters until convergence
     """
@@ -101,32 +101,4 @@ def update_params(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_guess, beta
     nf_vec = get_nf_vec(spinon_evals, spinon_evecs, beta)
     L_vec = get_L_vec(rotor_evals, rotor_evecs, beta, l_max)
 
-    return h_vec_update, t_eff_update, J_eff_update, mu, nf_vec, L_vec, count
-
-if __name__ == '__main__':
-    l_max = 18 # Truncate rotor Hilbert space
-
-    U_vals = [0.0, 0.5, 1.0]
-    beta = 50.0 # beta=50.0 is zero temperature
-    N_target = 2.0
-
-    t = 1.0
-    epsilon_vec = np.array([0.0,0.0])
-    h_vec_guess = -epsilon_vec
-    t_eff_guess = 0.95 * t
-    J_eff_guess = 0.95 * t   
-
-    for U in U_vals:
-        h_vec, t_eff, J_eff, mu, nf_vec, L_vec, count = update_params(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_guess, beta, l_max, N_target)
-
-        print(f'NEWTON (NAIVE)')
-        print(f'U: {U}')
-        print(f'beta: {beta}')
-        print(f'epsilon_vec: {epsilon_vec}')
-        print(f'h_vec: {h_vec}')
-        print(f't_eff: {t_eff}')
-        print(f'J_eff: {J_eff}')
-        print(f'nf: {nf_vec}')
-        print(f'L: {L_vec}')
-        print(f'mu: {mu}')
-        print(f'count: {count}\n\n')
+    return h_vec_update, t_eff_update, J_eff_update, nf_vec, L_vec, mu, count

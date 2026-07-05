@@ -1,6 +1,11 @@
 import numpy as np
 
-from utility.helpers import k_delta, get_mixed_basis
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from Utility.helpers import k_delta, get_mixed_basis
 
 L_CUT = 2
 ROTOR_DIM = (2 * L_CUT + 1)
@@ -8,10 +13,11 @@ PHYS_DIM = 4 * 4
 SPINON_DIM = 16
 DIM = SPINON_DIM * ROTOR_DIM * ROTOR_DIM
 
-"""
-    Returns physical spinon-rotor basis kets
-"""
+
 def get_phys_basis():
+    """
+    Returns physical spinon-rotor basis kets
+    """
     basis = get_mixed_basis()
     phys_basis = []
 
@@ -24,10 +30,11 @@ def get_phys_basis():
 
     return phys_basis
 
-"""
-    Returns physical spinon-rotor basis kets of definite particle number
-"""
+
 def get_def_particle_basis(num_particles):
+    """
+    Returns physical spinon-rotor basis kets of definite particle number
+    """
     basis = get_phys_basis()
     def_particle_basis = []
 
@@ -39,22 +46,22 @@ def get_def_particle_basis(num_particles):
 
     return def_particle_basis
 
-"""
-    Takes 6 quantum numbers labeling the slave-rotor state and returns the basis index
-"""
 def get_index(q_nums):
+    """
+        Takes 6 quantum numbers labeling the slave-rotor state and returns the basis index
+    """
     n1_up, n1_down, n2_up, n2_down, l1, l2 = q_nums
     i = ((2*L_CUT + 1) ** 2) * (8*n1_up + 4*n1_down + 2*n2_up + n2_down) + (2*L_CUT + 1) * (l2 + L_CUT) + (l1 + L_CUT)
 
     return i
 
-"""
-    Returns a matrix representation for the constraint operator of a site.
-    The constraint operator of site i=0,1 has 0 eigenvalues for physical states on site i
-    and non-zero eigenvalues for non-physical states on site i
-    Physical states must have zero eigenvalues on both dimer sites
-"""
 def get_constraint_operator(site):
+    """
+        Returns a matrix representation for the constraint operator of a site.
+        The constraint operator of site i=0,1 has 0 eigenvalues for physical states on site i
+        and non-zero eigenvalues for non-physical states on site i
+        Physical states must have zero eigenvalues on both dimer sites
+    """
     mixed_basis = get_mixed_basis()
     operator = np.zeros((DIM, DIM))
 
@@ -72,11 +79,11 @@ def get_constraint_operator(site):
     return operator
 
 
-"""
-    Look at the Latex document to see where I got this.
-    An ugly Hamiltonian, it is
-"""
 def get_H_mel(epsilon, U, t, q_nums, q_nums_prime):
+    """
+        Look at the Latex document to see where I got this.
+        An ugly Hamiltonian, it is
+    """
     n1_up, n1_down, n2_up, n2_down, l1, l2 = q_nums
     n1_up_prime, n1_down_prime, n2_up_prime, n2_down_prime, l1_prime, l2_prime = q_nums_prime
 
@@ -109,12 +116,14 @@ def get_H_mel(epsilon, U, t, q_nums, q_nums_prime):
 
     return mat_el
     
-
-"""
-    Returns a Hamiltonian constructed from a basis
-    Mixed, physical, or definite particle bases can be input to get the desired Hamiltonian
-"""
 def get_H(epsilon, U, t, basis):
+    """
+        Returns a Hamiltonian constructed from a basis
+        Mixed, physical, or definite particle bases can be input to get the desired Hamiltonian
+
+        Both mixed and physical bases are SR constructions
+        Definite particle basis pulls the N-particle subspace of the Fock space
+    """
     dim = len(basis)
     H = np.zeros((dim, dim))
 

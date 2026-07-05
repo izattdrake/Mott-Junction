@@ -338,12 +338,6 @@ def get_E_dimer_phys(epsilon_vec, U, t_nn, rotor1, rotor2, l_max):
         where |\psi_f> takes on 1 of the 4 calculated eigenkets for the spinon Hamiltonian
         This is highly specific to the homogeneous dimer problem
     """
-    E5 = 0.5*(U - np.sqrt(16*t_nn**2 + U**2))
-    d = E5/(2*t_nn)
-    c1 = 1/np.sqrt(2 + 2 * d**2)
-    c2 = d/c1
-    #spinon1 = [(c1, '1100'), (c1, '0011'), (c2, '1001'), (c2,'0110')]
-
     spinon1 = [(0.5,'1100'), (0.5,'0110'), (0.5,'1001'), (0.5,'0011')]
     spinon2 = [(0.5,'1100'), (0.5,'0110'), (-0.5,'1001'), (-0.5,'0011')]
     spinon3 = [(0.5,'1100'), (-0.5,'0110'), (0.5,'1001'), (-0.5,'0011')]
@@ -377,3 +371,18 @@ def get_E_dimer_phys(epsilon_vec, U, t_nn, rotor1, rotor2, l_max):
         phys_energies[i] = E + U
 
     return phys_energies
+
+def get_E_gs(epsilon_vec, U, h_vec, t_eff_mat, Z_vec, K_vec, mu, l_max):
+    """
+    Calculate ground-state energy w/o physical subspace projection
+    """
+    def get_E0(Z_vec, K_vec):
+        return -np.sum(K_vec * np.sqrt(Z_vec))
+    
+    spinon_evals, _ = np.linalg.eigh(get_H_spinon(epsilon_vec, t_eff_mat, h_vec, mu))
+    rotor_evals, _ = np.linalg.eigh(get_H_rotor(U, h_vec, K_vec, l_max, 0))
+
+    E0 = get_E0(Z_vec, K_vec)
+
+    E_gs = 2*spinon_evals[0] + 2*rotor_evals[0] + E0
+    return E_gs

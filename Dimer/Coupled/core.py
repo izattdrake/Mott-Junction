@@ -158,6 +158,9 @@ def get_L(rotor_evals, rotor_evecs, beta, l_max, site):
     return L
  
 def get_L_vec(rotor_evals, rotor_evecs, beta, l_max):
+    """
+    Thermal average of L at each lattice site, returned as a numpy array
+    """
     # Set GS energy to zero
     L_vec = np.zeros(2)
  
@@ -166,6 +169,39 @@ def get_L_vec(rotor_evals, rotor_evecs, beta, l_max):
  
     return L_vec
 
+def get_Z_vec(rotor_evals, rotor_evecs, beta, l_max):
+    """
+    Thermal average of cos(theta_i) at each lattice site
+    Assume no flux such that <cos(theta_i)> = <e^{i\theta}>
+    """
+    dim = 2 * l_max + 1
+    energies = rotor_evals - rotor_evals[0]
+    bz = np.exp(-beta * energies)
+
+    l1 = np.repeat(np.arange(-l_max, l_max + 1), dim)
+    l2 = np.tile(np.arange(-l_max, l_max + 1), dim)
+
+    Z_vec = np.zeros(2)
+
+    for site in range(2):
+        S = np.zeros((dim**2, dim**2))
+        if site == 0:
+            mask = l1 < l_max
+            bra_index = np.where(mask)[0]
+            ket_index = (l1[mask] + 1 + l_max) * dim + (l2[mask] + l_max)
+        else:
+            mask = l2 < l_max
+            bra_index = np.where(mask)[0]
+            ket_index = (l1[mask] + l_max) * dim + (l2[mask] + 1 + l_max)
+
+        S[ket_index, bra_index] = 1.0
+
+        # <l1, l2|e^{i\theta}|l1, l2>
+        expectation_vals = np.real(np.sum(np.conj(rotor_evecs) * (S @ rotor_evecs), axis=0))
+        Z_vec[site] = np.sum(bz * expectation_vals) / np.sum(bz)
+
+    return Z_vec
+    
 def get_Jacobian(U, epsilon_vec, h_vec, dh, t_eff, J_eff, beta, l_max, mu):
     """
         Return Jacobian used in Newton's method
@@ -213,3 +249,44 @@ def get_Jacobian(U, epsilon_vec, h_vec, dh, t_eff, J_eff, beta, l_max, mu):
     J = J_nf - J_L
  
     return J
+
+def get_E_gs(epsilon_vec, U, h_vec, t_eff, J_eff, mu, beta, l_max):
+    """
+    Calculate ground state energy w/o physical subspace projection
+    """
+    def get_E0(rotor_evals, rotor_evecs, J_eff, beta, l_max):
+        """
+        Calculate zero-point energy from MF decoupling
+        E0 = \sum_{ij}J^{eff}_{ij}<cos(theta_i - theta_j)>
+        """
+        dim = 2 * l_max + 1
+        l1 = np.repeat(np.arange(-l_max, l_max + 1), dim)
+        l2 = np.tile(np.arange(-l_max, l_max + 1), dim)
+
+        # Build the shift operator; maps |l1, l2> -> |l1+1,l2-1> + |l1-1,l2+1>
+        S = np.zeros((dim**2, dim**2))
+
+        mask = (l1 < l_max) & (l2 > -l_max)
+        bra_index = np.where(mask)[0]
+        ket_index = (l1[mask] + 1 + l_max) * dim + (l2[mask] - 1 + l_max)
+        S[ket_index, bra_index] = 1.0  # |l1,l2> -> |l1+1,l2-1>
+        S[bra_index, ket_index] = 1.0  # |l1,l2> -> |l1-1,l2+1>
+
+        # Shift energies to avoid overflow
+        energies = rotor_evals - rotor_evals[0]
+        bz = np.exp(-beta * energies)
+
+        # <psi_n|S|psi_n> for each eigenstate n
+        expectation_vals = np.real(np.sum(np.conj(rotor_evecs) * (S @ rotor_evecs), axis=0))
+        Z = np.sum(bz)
+
+        E0 = 2 * J_eff * np.sum(bz * expectation_vals) / (2 * Z)
+        return E0
+
+    spinon_evals, _ = np.linalg.eigh(get_H_spinon(epsilon_vec, h_vec, t_eff, mu))
+    rotor_evals, rotor_evecs = np.linalg.eigh(get_H_rotor(U, h_vec, J_eff, l_max))
+
+    E0 = get_E0(rotor_evals, rotor_evecs, J_eff, beta, l_max)
+    E_gs = 2 * spinon_evals[0] + rotor_evals[0] + E0
+    
+    return E_gs

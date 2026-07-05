@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import sys 
 
-from core import (
+from Decoupled.core import (
     get_H_spinon,
     get_nf_vec,
     get_rotor_eig_vec,
@@ -59,7 +59,7 @@ def modified_broyden_step(f_vec, h_vec, alpha, weight,
     return alpha * f_vec - np.array(u_hist).T @ gamma
 
 def decoupled_broyden_params(epsilon_vec, t_mat, U, t_eff_mat_guess, h_vec_guess, 
-                             Z_vec_guess, K_vec_guess, beta, l_max, N_target):
+                             Z_vec_guess, K_vec_guess, beta, l_max, N_target=2.0):
     """
     Iterate over slave rotor calculations until parameters converge
     """
@@ -147,53 +147,4 @@ def decoupled_broyden_params(epsilon_vec, t_mat, U, t_eff_mat_guess, h_vec_guess
     nf_vec = get_nf_vec(spinon_eigvals, spinon_eigvecs, beta)
     L_vec = get_L_vec(rotor_eigvals_vec, rotor_eigvecs_vec, beta, l_max)
 
-    return h_vec_update, Z_vec_update, K_vec_update, t_eff_mat, nf_vec, L_vec, count
-
-if __name__ == '__main__':
-    l_max = 40
-
-    U_vals = np.linspace(0.0, 4.0, 150)
-    N_target = 2
-    beta = 5.0 
-
-    t_nn = 1.0
-    t_mat = np.diag(np.full(1, t_nn), k=1) + np.diag(np.full(1, t_nn), k=-1)
-
-    epsilon_vec = np.zeros(2)
-    t_eff_mat_guess = 0.8*t_mat
-    h_vec_guess = -epsilon_vec
-    Z_vec_guess = np.full(2, 0.5)
-    K_vec_guess = np.full(2,-1.0)
-
-    Z_data = []
-
-    for U in U_vals:
-        h_vec, Z_vec, K_vec, t_eff_mat, nf_vec, L_vec, count = decoupled_broyden_params(
-                epsilon_vec, t_mat, U, t_eff_mat_guess, h_vec_guess, 
-                Z_vec_guess, K_vec_guess, beta, l_max, N_target=2.0
-            )
-        
-        Z_data.append(Z_vec[0])
-
-        """
-        print(f'NEWTON (NAIVE)')
-        print(f'U: {U}')
-        print(f'beta: {beta}')
-        print(f'epsilon: {epsilon_vec}')
-        print(f'h: {h_vec}')
-        print(f't_eff: {t_eff_mat[0,1]}')
-        print(f'Z: {Z_vec}')
-        print(f'K: {K_vec}')
-        print(f'nf: {nf_vec}')
-        print(f'L_vec: {L_vec}')
-        print(f'count: {count}')
-        """
-
-    plt.figure(figsize=(6, 4))
-    plt.plot(U_vals, Z_data, 'o-', lw=1.5, ms=4)
-    plt.xlabel(r"$U$")
-    plt.ylabel(r"$Z = m/m^*$")
-    plt.title("Quasiparticle weight")
-    plt.grid(True, alpha=0.3)
-    plt.ylim(bottom=0)
-    plt.show()
+    return h_vec_update, Z_vec_update, K_vec_update, t_eff_mat, nf_vec, L_vec, mu, count

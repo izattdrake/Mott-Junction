@@ -54,7 +54,7 @@ def modified_broyden_step(f_vec, h_vec, alpha, weight, dF_hist, u_hist, h_prev, 
  
     return alpha * f_vec - np.array(u_hist).T @ gamma
  
-def update_params(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_guess, beta, l_max, N_target=3.0):
+def coupled_broyden_params(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_guess, beta, l_max, N_target=2.0):
     """
         Iterate over parameters until convergence with the modified Broyden's method.
     """
@@ -108,7 +108,6 @@ def update_params(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_guess, beta
         f_prev = f_vec.copy()
         h_vec_update = h_vec + delta_h
  
-        # Picard (damped) mixing for the effective amplitudes (unchanged)
         t_eff_update = (1 - ALPHA_T_EFF) * t_eff + ALPHA_T_EFF * get_t_eff(rotor_evals, rotor_evecs, t, beta, l_max)
         J_eff_update = (1 - ALPHA_J_EFF) * J_eff + ALPHA_J_EFF * get_J_eff(spinon_evals, spinon_evecs, t, beta)
  
@@ -135,32 +134,4 @@ def update_params(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_guess, beta
     nf_vec = get_nf_vec(spinon_evals, spinon_evecs, beta)
     L_vec = get_L_vec(rotor_evals, rotor_evecs, beta, l_max)
  
-    return h_vec_update, t_eff_update, J_eff_update, mu, nf_vec, L_vec, count
- 
-
-if __name__ == '__main__':
-    l_max = 18 # Truncate rotor Hilbert space
-
-    U_vals = [0.0, 0.5, 1.0]
-    beta = 50.0 # beta=50.0 is zero temperature
-    N_target = 2.0
-    t = 1.0
-    epsilon_vec = np.array([0.0,0.0])
-    h_vec_guess = -epsilon_vec
-    t_eff_guess = 0.95 * t
-    J_eff_guess = 0.95 * t   
-
-    for U in U_vals: 
-        h_vec, t_eff, J_eff, mu, nf_vec, L_vec, count = update_params(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_guess, beta, l_max, N_target)
- 
-        print(f'MODIFIED BROYDEN')
-        print(f'U: {U}')
-        print(f'N: {N_target}')
-        print(f'epsilon_vec: {epsilon_vec}')
-        print(f'h_vec: {h_vec}')
-        print(f't_eff: {t_eff}')
-        print(f'J_eff: {J_eff}')
-        print(f'nf: {nf_vec}')
-        print(f'L: {L_vec}')
-        print(f'mu: {mu}')
-        print(f'count: {count}\n\n')
+    return h_vec_update, t_eff_update, J_eff_update, nf_vec, L_vec, mu, count
