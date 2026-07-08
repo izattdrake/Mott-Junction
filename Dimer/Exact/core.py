@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 
 a_ann = np.array([[0., 1.], [0., 0.]])     # annihilation on one mode
 pauli_z = np.diag([1., -1.])               # (-1)^n string factor
-ide = np.eye(2)                       # Identity operator
+id = np.eye(2)                       # Identity operator
 
 def kronecker_matrix(*mats):
     out = mats[0]
@@ -29,9 +29,9 @@ def kronecker_matrix(*mats):
     return out
 
 # c[mode], mode = 0:1up 1:1dn 2:2up 3:2dn
-c_ann = [kronecker_matrix(a_ann, ide, ide, ide),
-         kronecker_matrix(pauli_z, a_ann, ide, ide),
-         kronecker_matrix(pauli_z, pauli_z, a_ann, ide),
+c_ann = [kronecker_matrix(a_ann, id, id, id),
+         kronecker_matrix(pauli_z, a_ann, id, id),
+         kronecker_matrix(pauli_z, pauli_z, a_ann, id),
          kronecker_matrix(pauli_z, pauli_z, pauli_z, a_ann)]
 
 c_cre = [mat.T for mat in c_ann]
@@ -125,13 +125,12 @@ class HubbardDimer:
         """
         return 1j * (2 * np.arange(n_max) + 1) * np.pi / beta
 
-    # -- self-energy: Sigma(z) = G0^-1 - G^-1 --------------------------
     def get_self_energy(self, z, beta=None):
         """
         Calculate self-energy from Dyson's equation
         \Sigma_{ij}(z) = G0_{ij}^{-1} - G_{ij}^{-1}
         """
-        h0 = np.array([[self.eps_vec[0] - self.mu, -self.t],    # Single-particle matrix
+        h0 = np.array([[self.eps_vec[0] - self.mu, -self.t],    # Single-particle Hamiltonian
                        [-self.t, self.eps_vec[1] - self.mu]])
         
         z = np.atleast_1d(np.asarray(z, dtype=complex))
