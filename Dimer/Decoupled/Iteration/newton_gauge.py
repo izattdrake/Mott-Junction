@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import sys 
 
-from .core import (
+from ..core import (
     get_H_spinon,
     get_nf_vec,
     get_rotor_eig_vec,

@@ -2,8 +2,8 @@ import numpy as np
 import sys
 
 from pathlib import Path
-from .broyden import iterate_broyden
-from .newton_gauge import iterate_newton_gauge
+from .Iteration.broyden import iterate_broyden
+from .Iteration.newton_gauge import iterate_newton_gauge
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from Utility import helpers

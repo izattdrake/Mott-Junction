@@ -1,7 +1,7 @@
 import numpy as np
 import sys 
 
-from .core import (
+from ..core import (
     get_H_spinon,
     get_t_eff,
     get_nf_vec,

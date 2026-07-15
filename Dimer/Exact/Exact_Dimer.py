@@ -1,6 +1,4 @@
 import numpy as np
-import matplotlib
-matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 # ====================================================================
@@ -16,6 +14,12 @@ import matplotlib.pyplot as plt
 #   it is not a good method for a crystal with more than 6 or 7
 #   lattice sites. One should use QuSpin or another library for that
 #   which uses more advanced methods to store large matrices.
+# --------------------------------------------------------------------
+#   This class structure differs from the slave-rotor dimers. Because
+#   we do not need to iterate this system, we do not need to know
+#   the temperature or filling beforehand. A class instance immediately
+#   solves for the eigenspace solutions, then each method takes in the
+#   temperature, etc, and solves for the observables.
 # ====================================================================
 
 a_ann = np.array([[0., 1.], [0., 0.]])     # annihilation on one mode
@@ -58,14 +62,16 @@ def mode(site, spin):
 #
 #   Fermionic operators are given matrix representations, not
 #   symbolic, for easy computation. 
+#   mu = U/2
 # ====================================================================
 
-class HubbardDimer:
-    def __init__(self, eps1, eps2, t, U, mu):
-        self.eps_vec = np.array([eps1, eps2])
+class Exact_Dimer:
+    def __init__(self, epsilon, t, U, mu):
+        self.eps_vec = np.array([-epsilon, epsilon])
         self.t, self.U, self.mu = t, U, mu
 
         H = np.zeros((16, 16))
+
         for site in (0, 1):
             n_up = c_cre[mode(site, 0)] @ c_ann[mode(site, 0)]
             n_down = c_cre[mode(site, 1)] @ c_ann[mode(site, 1)]
@@ -76,10 +82,7 @@ class HubbardDimer:
         self.evals, self.evecs = np.linalg.eigh(H)
 
     def get_bz_weights(self, beta):
-        """
-            Boltzmann Statistical Probabilities
-            If T=0, beta=None and all weight is locked to the ground state
-        """
+        """Calculates boltzmann probabilities"""
         if beta is None:                          
             bz = (self.evals - self.evals[0] < 1e-10).astype(float) # Lock all weight to the GS
         else:
@@ -88,17 +91,13 @@ class HubbardDimer:
         return bz / bz.sum()
 
     def get_gf(self, i, j, z, beta=None, spin=0):
-        """
-        Green's function calculated with the spectral Lehmann representation
-        G_ij(z) = sum_{m,n} <m|c_i|n><n|c_j^+|m> (w_m + w_n) / (z - (E_n - E_m))
-        where z = i\omega_n, \omega + i\delta^+, etc
-        """
+        """Calculate Green's functions with the spectral representation | z can be Matsubara or retarded"""
         weights = self.get_bz_weights(beta)
 
-        Ci = self.evecs.T @ c_ann[mode(i, spin)] @ self.evecs    # <m|c_i|n>
-        Cj = self.evecs.T @ c_cre[mode(j, spin)] @ self.evecs    # <m|c_j^+|n>
+        Mi = self.evecs.T @ c_ann[mode(i, spin)] @ self.evecs    # <m|c_i|n>
+        Lj = self.evecs.T @ c_cre[mode(j, spin)] @ self.evecs    # <m|c_j^+|n>
 
-        res = Ci * Cj.T * (weights[:, None] + weights[None, :])  # residues [m,n]
+        res = Mi * Lj.T * (weights[:, None] + weights[None, :])  # residues [m,n]
         pol = self.evals[None, :] - self.evals[:, None]          # poles E_n - E_m
 
         z = np.atleast_1d(np.asarray(z, dtype=complex))
@@ -106,30 +105,22 @@ class HubbardDimer:
         return ((res.ravel()[None, :] / (z[:, None] - pol.ravel()[None, :])).sum(axis=1))
 
     def get_gf_mat(self, z, beta=None):
-        """
-        Green's function matrix, corresponding to [[G_{11}, G_{12}], [G_{21}, G_{22}]]
-        2x2 GF matrix in site space; shape (len(z), 2, 2)
-        """
+        """Calculate 2x2 Green's function matrix for the entire dimer"""
         z = np.atleast_1d(np.asarray(z, dtype=complex))
-        G = np.empty((len(z), 2, 2), dtype=complex)
+        G_mat = np.empty((len(z), 2, 2), dtype=complex)
 
         for i in (0, 1):
             for j in (0, 1):
-                G[:, i, j] = self.get_gf(i, j, z, beta)
+                G_mat[:, i, j] = self.get_gf(i, j, z, beta)
 
-        return G
+        return G_mat
 
     def matsubara(self, beta, n_max=40):
-        """
-        Return fermionic Matsubara frequencies
-        """
+        """Return array of fermionic Matsubara frequencies"""
         return 1j * (2 * np.arange(n_max) + 1) * np.pi / beta
 
     def get_self_energy(self, z, beta=None):
-        """
-        Calculate self-energy from Dyson's equation
-        \Sigma_{ij}(z) = G0_{ij}^{-1} - G_{ij}^{-1}
-        """
+        """Calculate self-energy from Dyson's equation"""
         h0 = np.array([[self.eps_vec[0] - self.mu, -self.t],    # Single-particle Hamiltonian
                        [-self.t, self.eps_vec[1] - self.mu]])
         
@@ -140,13 +131,9 @@ class HubbardDimer:
         return self_energy
 
     def qp_weight(self, site=0, beta=None, d=1e-4):
-        """
-        Calculate quasiparticle weight from retarded Green's function
-        Z = [1 - d Re Sigma_{ii} / d\omega |_{\omega=0}]^{-1}
-        Uses finite difference method
-        """
-        S = self.get_self_energy(np.array([-d + 1e-6j, d + 1e-6j]), beta)[:, site, site]
-        return 1.0 / (1.0 - (S[1].real - S[0].real) / (2 * d))
+        """Calculate QP weight from retarded GF | Uses finite difference method"""
+        self_energy = self.get_self_energy(np.array([-d + 1e-6j, d + 1e-6j]), beta)[:, site, site]
+        return 1.0 / (1.0 - (self_energy[1].real - self_energy[0].real) / (2 * d))
 
     def qp_weight_matsubara(self, beta, site=0):
         """
@@ -157,14 +144,17 @@ class HubbardDimer:
         self_energy = self.get_self_energy(np.array([1j * w0]), beta)[0, site, site]
         return 1.0 / (1.0 - self_energy.imag / w0)
 
-    def occupation(self, beta=None):
-        """
-        Calculate electron occupation at each site at a given temperature
-        """
+    def get_occupation(self, beta=None):
+        """Calculate electron occupation at every site"""
         bz_weights = self.get_bz_weights(beta)
         n = np.zeros(2)
-        for i in (0, 1):
-            for s in (0, 1):
-                nop = c_cre[mode(i, s)] @ c_ann[mode(i, s)]
-                n[i] += bz_weights @ np.einsum('am,ab,bm->m', self.evecs, nop, self.evecs)
+        for site in range(2):
+            for spin in range(2):
+                nop = c_cre[mode(site, spin)] @ c_ann[mode(site, spin)]
+                n[site] += bz_weights @ np.einsum('am,ab,bm->m', self.evecs, nop, self.evecs)
         return n
+    
+    def get_E_gs(self):
+        """Return GS energy w/o grand-canonical chemical potential shift"""
+        E_gs = self.evals[0] + self.U
+        return E_gs
