@@ -1,7 +1,7 @@
 import numpy as np
 import sys 
 
-from Dimer.Coupled.core import (
+from .core import (
     get_H_spinon,
     get_t_eff,
     get_nf_vec,
@@ -27,10 +27,8 @@ from Dimer.Coupled.core import (
 #   is pure gauge. That is done in coupled_gauge.py. 
 # ====================================================================
 
-def coupled_naive_params(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_guess, beta, l_max, N_target=2.0):
-    """
-    Iterate over parameters until convergence
-    """
+def iterate_newton_naive(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_guess, beta, l_max, N_target=2.0):
+    """Calculate self-consistent parameters w/ Newton's method w/o gauge fix"""
     MAX_ITER = 1000
 
     ALPHA_H = 0.1
@@ -44,7 +42,7 @@ def coupled_naive_params(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_gues
     TOL_N  = 1e-6
 
     mu = 0.0 # Global chemical potential for total particle number
-    dh = 1e-5
+    dh = 1e-5 # Finite difference step
 
     did_converge = False
     count = 1
@@ -94,11 +92,10 @@ def coupled_naive_params(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_gues
         print(f'ERROR: DID NOT CONVERGE AFTER {MAX_ITER} ITERATIONS')
         sys.exit()
 
-    # Calculate nf, L with final Hamiltonians before return
     spinon_evals, spinon_evecs = np.linalg.eigh(get_H_spinon(epsilon_vec, h_vec, t_eff, mu))
     rotor_evals, rotor_evecs = np.linalg.eigh(get_H_rotor(U, h_vec, J_eff, l_max))
 
     nf_vec = get_nf_vec(spinon_evals, spinon_evecs, beta)
     L_vec = get_L_vec(rotor_evals, rotor_evecs, beta, l_max)
 
-    return h_vec_update, t_eff_update, J_eff_update, nf_vec, L_vec, mu, count
+    return spinon_evals, spinon_evecs, rotor_evals, rotor_evecs, h_vec_update, t_eff_update, J_eff_update, nf_vec, L_vec, mu, count

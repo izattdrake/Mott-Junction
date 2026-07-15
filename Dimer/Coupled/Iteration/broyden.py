@@ -1,7 +1,7 @@
 import numpy as np
 import sys
  
-from Dimer.Coupled.core import (
+from .core import (
     get_H_spinon,
     get_t_eff,
     get_nf_vec,
@@ -54,11 +54,9 @@ def modified_broyden_step(f_vec, h_vec, alpha, weight, dF_hist, u_hist, h_prev, 
  
     return alpha * f_vec - np.array(u_hist).T @ gamma
  
-def coupled_broyden_params(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_guess, beta, l_max, N_target=2.0):
-    """
-        Iterate over parameters until convergence with the modified Broyden's method.
-    """
-    MAX_ITER = 1000
+def iterate_broyden(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_guess, beta, l_max, N_target=2.0):
+    """Calculate self-consistent parameters w/ modified Broyden's method"""
+    MAX_ITER = 50000
  
     ALPHA_H = 0.1
     ALPHA_T_EFF = 0.1
@@ -91,11 +89,11 @@ def coupled_broyden_params(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_gu
     while not did_converge and count < MAX_ITER:
         h_vec, t_eff, J_eff  = h_vec_update, t_eff_update, J_eff_update
  
-        spinon_evals, spinon_evecs = np.linalg.eigh(get_H_spinon(epsilon_vec, h_vec, t_eff, mu))
-        rotor_evals, rotor_evecs = np.linalg.eigh(get_H_rotor(U, h_vec, J_eff, l_max))
+        evals_spinon, evecs_spinon = np.linalg.eigh(get_H_spinon(epsilon_vec, h_vec, t_eff, mu))
+        evals_rotor, evecs_rotor = np.linalg.eigh(get_H_rotor(U, h_vec, J_eff, l_max))
  
-        nf_vec = get_nf_vec(spinon_evals, spinon_evecs, beta)
-        L_vec = get_L_vec(rotor_evals, rotor_evecs, beta, l_max)
+        nf_vec = get_nf_vec(evals_spinon, evecs_spinon, beta)
+        L_vec = get_L_vec(evals_rotor, evecs_rotor, beta, l_max)
  
         f_vec = nf_vec - L_vec - 1.0
         delta_h = modified_broyden_step(f_vec, h_vec, ALPHA_H, WEIGHT,
@@ -108,8 +106,8 @@ def coupled_broyden_params(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_gu
         f_prev = f_vec.copy()
         h_vec_update = h_vec + delta_h
  
-        t_eff_update = (1 - ALPHA_T_EFF) * t_eff + ALPHA_T_EFF * get_t_eff(rotor_evals, rotor_evecs, t, beta, l_max)
-        J_eff_update = (1 - ALPHA_J_EFF) * J_eff + ALPHA_J_EFF * get_J_eff(spinon_evals, spinon_evecs, t, beta)
+        t_eff_update = (1 - ALPHA_T_EFF) * t_eff + ALPHA_T_EFF * get_t_eff(evals_rotor, evecs_rotor, t, beta, l_max)
+        J_eff_update = (1 - ALPHA_J_EFF) * J_eff + ALPHA_J_EFF * get_J_eff(evals_spinon, evecs_spinon, t, beta)
  
         N = np.sum(nf_vec)
         mu += ALPHA_MU * (N_target - N)
@@ -128,10 +126,10 @@ def coupled_broyden_params(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_gu
         print(f'ERROR: Did not converge after {MAX_ITER} iterations')
         sys.exit()
  
-    spinon_evals, spinon_evecs = np.linalg.eigh(get_H_spinon(epsilon_vec, h_vec, t_eff, mu))
-    rotor_evals, rotor_evecs = np.linalg.eigh(get_H_rotor(U, h_vec, J_eff, l_max))
+    evals_spinon, evecs_spinon = np.linalg.eigh(get_H_spinon(epsilon_vec, h_vec, t_eff, mu))
+    evals_rotor, evecs_rotor = np.linalg.eigh(get_H_rotor(U, h_vec, J_eff, l_max))
  
-    nf_vec = get_nf_vec(spinon_evals, spinon_evecs, beta)
-    L_vec = get_L_vec(rotor_evals, rotor_evecs, beta, l_max)
- 
-    return h_vec_update, t_eff_update, J_eff_update, nf_vec, L_vec, mu, count
+    nf_vec = get_nf_vec(evals_spinon, evecs_spinon, beta)
+    L_vec = get_L_vec(evals_rotor, evecs_rotor, beta, l_max)
+
+    return evals_spinon, evecs_spinon, evals_rotor, evecs_rotor, h_vec_update, t_eff_update, J_eff_update, nf_vec, L_vec, mu, count

@@ -1,14 +1,16 @@
 import numpy as np
+import matplotlib.pyplot as plt
 import sys 
 
-from Dimer.Coupled.core import (
+from .core import (
     get_H_spinon,
-    get_t_eff,
     get_nf_vec,
-    get_H_rotor,
-    get_J_eff,
+    get_rotor_eig_vec,
     get_L_vec,
-    get_Jacobian
+    get_Jacobian,
+    get_Z_vec,
+    get_K_vec,
+    get_t_eff
 )
 
 # ====================================================================
@@ -21,9 +23,7 @@ from Dimer.Coupled.core import (
 # --------------------------------------------------------------------
 #   The singularity comes about from the gauge constraint. The total
 #   charge is already handled by the global chemical potential, so
-#   its information is redundant. I.e. if the residual is f = [f1, f2],
-#   then f1 + f2 = n1 + n2 + L1 + L2 - N_at = 2N - 2N_{at} is fixed.
-#   Only f1 - f2 must be iterated over. 
+#   its information is redundant.
 # --------------------------------------------------------------------
 #   We can easily implement this method by removing the gauge vector
 #   from the vector space at every iteration in Newton's method. We
@@ -57,7 +57,7 @@ def gauge_fixed_newton_step(jacobian, f):
     delta_h = -np.linalg.pinv(J_phys) @ f_phys
     
     return delta_h
- 
+
 def gauge_projected_residual(f):
     """
     Norm of the residual with the gauge component removed.
@@ -68,83 +68,78 @@ def gauge_projected_residual(f):
     u = np.ones(N) / np.sqrt(N)
 
     return np.linalg.norm(f - u * (u @ f))
- 
-def coupled_gauge_params(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_guess, beta, l_max, N_target=2.0):
-    """
-        Iterate over parameters until convergence
-    """
-    MAX_ITER = 1000
- 
-    ALPHA_H = 0.1
-    ALPHA_T_EFF = 0.1
-    ALPHA_J_EFF = 0.1
-    ALPHA_MU = 0.1
- 
-    TOL_H = 1e-8
-    TOL_T_EFF = 1e-8
-    TOL_J_EFF = 1e-8
-    TOL_N  = 1e-6
-    TOL_PHYS_F = 1e-8
- 
+
+def iterate_newton_gauge(epsilon_vec, t_mat, U, t_eff_mat_guess, h_vec_guess, Z_vec_guess, K_vec_guess, beta, l_max, N_target=2, N_at=2):
+    """Calculate self-consistent parameters w/ Newton's method & gauge fix"""
+    MAX_ITER = 1000000
+
+    ALPHA_H = 1e-3
+    ALPHA_Z = 1e-3
+    ALPHA_K = 1e-3
+    ALPHA_T_EFF = 1e-3
+    ALPHA_MU = 1e-3
+
+    TOL_H = 1e-10
+    TOL_T_EFF = 1e-10
+    TOL_Z = 1e-10
+    TOL_K = 1e-10
+    TOL_N = 1e-8
+    TOL_PHYS_F = 1e-10
+
     mu = 0.0 # Global chemical potential
     dh = 1e-5 # Finite difference step
 
     did_converge = False
     count = 1
 
-    h_vec_update, t_eff_update, J_eff_update = h_vec_guess, t_eff_guess, J_eff_guess
- 
-    while not did_converge and count < MAX_ITER:
-        h_vec, t_eff, J_eff  = h_vec_update, t_eff_update, J_eff_update
- 
-        spinon_evals, spinon_evecs = np.linalg.eigh(get_H_spinon(epsilon_vec, h_vec, t_eff, mu))
-        rotor_evals, rotor_evecs = np.linalg.eigh(get_H_rotor(U, h_vec, J_eff, l_max))
- 
-        nf_vec = get_nf_vec(spinon_evals, spinon_evecs, beta)
-        L_vec = get_L_vec(rotor_evals, rotor_evecs, beta, l_max)
- 
-        f_vec = nf_vec - L_vec - 1.0
-        phys_f_norm = gauge_projected_residual(f_vec) # Residual that must vanish | Equals |f1 - f2| for the dimer.
-        jacobian = get_Jacobian(U, epsilon_vec, h_vec, dh, t_eff, J_eff, beta, l_max, mu)
- 
-        # Gauge-fixed Newton's method | h1 + h2 held fixed
-        try:
-            delta_h = gauge_fixed_newton_step(jacobian, f_vec)
-        except np.linalg.LinAlgError:
-            print('ERROR: SINGULAR JACOBIAN')
-            print(f'U: {U}')
-            print(f'beta: {beta}')
-            print(f'N: {N_target}')
-            print(f'epsilon_vec: {epsilon_vec}')
-            sys.exit()
+    h_vec_update, Z_vec_update, K_vec_update, t_eff_mat_update = h_vec_guess, Z_vec_guess, K_vec_guess, t_eff_mat_guess
 
- 
-        h_vec_update = h_vec + ALPHA_H * delta_h
-        t_eff_update = (1 - ALPHA_T_EFF) * t_eff + ALPHA_T_EFF * get_t_eff(rotor_evals, rotor_evecs, t, beta, l_max)
-        J_eff_update = (1 - ALPHA_J_EFF) * J_eff + ALPHA_J_EFF * get_J_eff(spinon_evals, spinon_evecs, t, beta)
- 
+    while not did_converge and count < MAX_ITER:
+        h_vec, Z_vec, K_vec, t_eff_mat = h_vec_update, Z_vec_update, K_vec_update, t_eff_mat_update
+        
+        evals_spinon, evecs_spinon = np.linalg.eigh(get_H_spinon(epsilon_vec, t_eff_mat, h_vec, mu))
+        evals_rotor_vec, evecs_rotor_vec = get_rotor_eig_vec(U, h_vec, K_vec, l_max)
+
+        nf_vec = get_nf_vec(evals_spinon, evecs_spinon, beta)
+        L_vec = get_L_vec(evals_rotor_vec, evecs_rotor_vec, beta, l_max)
+
+        f_vec = nf_vec - L_vec - N_at / 2.0
+        phys_f_norm = gauge_projected_residual(f_vec) # Residual norm that must vanish
+        jacobian = get_Jacobian(epsilon_vec, U, t_eff_mat, h_vec, dh, mu, K_vec, beta, l_max)
+
+        delta_h = gauge_fixed_newton_step(jacobian, f_vec)
+
+        # Update parameters
+        h_vec_update = h_vec + ALPHA_H * delta_h 
+        Z_vec_update = (1.0 - ALPHA_Z) * Z_vec + ALPHA_Z * get_Z_vec(evals_rotor_vec, evecs_rotor_vec, beta)
+        K_vec_update = (1.0 - ALPHA_K) * K_vec + ALPHA_K * get_K_vec(t_mat, Z_vec, evals_spinon, evecs_spinon, beta)
+        t_eff_mat_update = (1 - ALPHA_T_EFF) * t_eff_mat + ALPHA_T_EFF * get_t_eff(t_mat, Z_vec)
+
+        # Adjust total particle number
         N = np.sum(nf_vec)
         mu += ALPHA_MU * (N_target - N)
- 
+
+        # Test convergence of all parameters within selected bounds
         did_converge = (
             np.allclose(h_vec_update, h_vec, atol=TOL_H) and
-            np.allclose(t_eff_update, t_eff, atol=TOL_T_EFF) and
-            np.allclose(J_eff_update, J_eff, atol=TOL_J_EFF) and
+            np.allclose(t_eff_mat_update, t_eff_mat, atol=TOL_T_EFF) and
+            np.allclose(Z_vec_update, Z_vec, atol=TOL_Z) and
+            np.allclose(K_vec_update, K_vec, atol=TOL_K) and
             np.allclose(N, N_target, atol=TOL_N) and
             phys_f_norm < TOL_PHYS_F
         )
- 
+
         count += 1
- 
+
     if not did_converge:
-        print(f'ERROR: DID NOT CONVERGE AFTER {MAX_ITER} ITERATIONS')
+        print(f'decoupled_gauge_params | ERROR: Did not converge after {MAX_ITER} iterations.')
         sys.exit()
- 
-    spinon_evals, spinon_evecs = np.linalg.eigh(get_H_spinon(epsilon_vec, h_vec, t_eff, mu))
-    rotor_evals, rotor_evecs = np.linalg.eigh(get_H_rotor(U, h_vec, J_eff, l_max))
- 
-    nf_vec = get_nf_vec(spinon_evals, spinon_evecs, beta)
-    L_vec = get_L_vec(rotor_evals, rotor_evecs, beta, l_max)
- 
-    return h_vec_update, t_eff_update, J_eff_update, nf_vec, L_vec, mu, count
- 
+
+    # Calculate nf, L with final Hamiltonians before return
+    evals_spinon, evecs_spinon = np.linalg.eigh(get_H_spinon(epsilon_vec, t_eff_mat_update, h_vec_update, mu))
+    evals_rotor_vec, evecs_rotor_vec = get_rotor_eig_vec(U, h_vec_update, K_vec_update, l_max)
+
+    nf_vec = get_nf_vec(evals_spinon, evecs_spinon, beta)
+    L_vec = get_L_vec(evals_rotor_vec, evecs_rotor_vec, beta, l_max)
+
+    return evals_spinon, evecs_spinon, evals_rotor_vec, evecs_rotor_vec, h_vec_update, Z_vec_update, K_vec_update, t_eff_mat, nf_vec, L_vec, mu, count
