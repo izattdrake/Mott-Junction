@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import sys 
 
-from .core import (
+from ..core import (
     get_H_spinon,
     get_nf_vec,
     get_rotor_eig_vec,
@@ -110,7 +110,7 @@ def iterate_broyden(epsilon_vec, t_mat, U, t_eff_mat_guess, h_vec_guess, Z_vec_g
         h_vec_update = h_vec + delta_h
 
         # Update parameters
-        Z_vec_update = (1.0 - ALPHA_Z) * Z_vec + ALPHA_Z * get_Z_vec(evals_rotor_vec, evecs_rotor_vec, beta, l_max)
+        Z_vec_update = (1.0 - ALPHA_Z) * Z_vec + ALPHA_Z * get_Z_vec(evals_rotor_vec, evecs_rotor_vec, beta)
         K_vec_update = (1.0 - ALPHA_K) * K_vec + ALPHA_K * get_K_vec(t_mat, Z_vec, evals_spinon, evecs_spinon, beta)
         t_eff_mat_update = (1 - ALPHA_T_EFF) * t_eff_mat + ALPHA_T_EFF * get_t_eff(t_mat, Z_vec)
 
