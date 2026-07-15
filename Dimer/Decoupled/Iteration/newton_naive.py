@@ -67,7 +67,7 @@ def iterate_newton_naive(epsilon_vec, t_mat, U, t_eff_mat_guess, h_vec_guess, Z_
         nf_vec = get_nf_vec(evals_spinon, evecs_spinon, beta)
         L_vec = get_L_vec(evals_rotor_vec, evecs_rotor_vec, beta, l_max)
 
-        f = nf_vec - L_vec - N_AT / 2.0
+        f = nf_vec - L_vec - N_at / 2.0
         jac = get_Jacobian(epsilon_vec, U, t_eff_mat, h_vec, dh, mu, K_vec, beta, l_max)
 
         try:

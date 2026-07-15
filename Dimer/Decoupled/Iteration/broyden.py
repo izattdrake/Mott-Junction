@@ -72,6 +72,7 @@ def iterate_broyden(epsilon_vec, t_mat, U, t_eff_mat_guess, h_vec_guess, Z_vec_g
     TOL_Z = 1e-10
     TOL_K = 1e-10
     TOL_N = 1e-8
+    TOL_F = 1e-10
 
     WEIGHT = 1e-2
     MEMORY = 8
@@ -98,7 +99,7 @@ def iterate_broyden(epsilon_vec, t_mat, U, t_eff_mat_guess, h_vec_guess, Z_vec_g
         nf_vec = get_nf_vec(evals_spinon, evecs_spinon, beta)
         L_vec = get_L_vec(evals_rotor_vec, evecs_rotor_vec, beta, l_max)
 
-        f_vec = nf_vec - L_vec - N_AT / 2.0
+        f_vec = nf_vec - L_vec - N_at / 2.0
         delta_h = modified_broyden_step(f_vec, h_vec, ALPHA_H, WEIGHT, dF_hist, u_hist, h_prev, f_prev)
         
         if len(dF_hist) > MEMORY:
