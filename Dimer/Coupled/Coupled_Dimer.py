@@ -38,7 +38,7 @@ class Coupled_Dimer:
     def __init__(self, epsilon, U, t, beta, l_max, N_target=2, ITERATION=0):
         self.epsilon_vec = np.array([-epsilon/2.0, epsilon/2.0]) # Even/opposite doping to preserve PHS, restricts chem. pot.
         self.U, self.t, self.beta, self.l_max, self.N_target = U, t, beta, l_max, N_target
-
+        
         self.dim_rotor = 2*l_max + 1 # Dimension for one site, full rotor Hilbert space is dim**2
 
         t_eff_guess = 0.8 * self.t
@@ -53,32 +53,95 @@ class Coupled_Dimer:
                                                                                                                                                                                          J_eff_guess, self.beta, self.l_max, self.N_target)
         else:
             raise ValueError('Coupled_Dimer.__init__ | ERROR: ITERATION argument')
+
+        self.mu_phys = self.mu + self.U / 2.0 # Account for U/2 shift in SR formalism
+    
+    # ====================================================================
+    #   PRIVATE METHODS
+    # ====================================================================
+    def __matsubara_freqs(self, n_max=40):
+        """Calculate array of fermionic Matsubara frequencies omega_n = pi(2n+1)/beta"""
+        if self.beta is None:
+            raise ValueError(f'Coupled_Dimer.__matsubara_freqs | Error: Only defined at finite temperature')
+        freqs = np.pi * (2 * np.arange(n_max) + 1) / self.beta # Only works at zero temperature
+        return freqs    
+    
+    def __shift_op(self, site):
+        """Matrix of e^{i theta_j} in the |l1,l2> basis"""
+        l1 = np.repeat(np.arange(-self.l_max, self.l_max+1), self.dim_rotor)
+        l2 = np.tile(np.arange(-self.l_max, self.l_max+1), self.dim_rotor)
+
+        shift_op = np.zeros((self.dim_rotor**2, self.dim_rotor**2))
+        if site == 0:
+            mask = l1 < self.l_max
+            bra_index = (l1[mask] + self.l_max + 1)*self.dim_rotor + (l2[self.dim_rotor] + self.l_max)
+        elif site == 1:
+            mask = l2 < self.l_max
+            bra_index = (l1[mask] + self.l_max) * self.dim_rotor + (l2[mask] + self.l_max + 1)
+
+        ket_index = np.where(mask)[0]
+        shift_op[bra_index, ket_index] = 1.0
+        return shift_op
+    
+    def __gf_spectral_data(self, tol=1e-12):
+        """Calculate Green's function data. Poles P_k, residues R_k[i,j] with G_ij(z) = sum_k R_k[i,j]/(z-P_k).
+            Cached and saved on first call. Used for quickly calculating values."""
+        if hasattr(self, '_gf_cache'):
+            return self._gf_cache
         
+        # Rotor matrix elements: <m|e^{i\theta_j}|n>
+        mel_rotor = np.stack([self.evecs_rotor.T @ self.__shift_op(site) @ self.evecs_rotor for site in range(2)])
+
+        evals_rotor_diff = self.evals_rotor[:, None] - self.evals_rotor[None, :]
+
+        bz_rotor = helpers._bz_weights(self.evals_rotor, self.beta) # Rotor boltzmann probabilities
+        p_rotor_ket = bz_rotor[None, :]
+        p_rotor_bra = bz_rotor[:, None]
+
+        pole_vec, res_vec = [], []
+        for i in range(2):
+            fermi_spinon_vec = helpers._fermi(self.evals_spinon[i])
+            
+            spinon_rotor_mix = fermi_spinon_vec * p_rotor_bra + (1.0 - fermi_spinon_vec) * p_rotor_ket # Convolution of spinon/rotor
+            spinon_coeff = self.evecs_spinon[:,i] # spinon state coefficients
+
+            R = np.einsum('i,j,inm,jnm,nm->nmij', spinon_coeff, spinon_coeff, mel_rotor, mel_rotor, spinon_rotor_mix)
+            
+            pole_vec.append(self.evals_spinon[i] + evals_rotor_diff.ravel())
+            res_vec.append(R.reshape(-1, 2, 2))
+
+        P, R = np.concatenate(pole_vec), np.concatenate(res_vec)
+        
+        finite_res_mask = np.abs(R).max(axis=(1, 2)) > tol # Throw away vanishing residues (matrix elements vanish)
+        self._gf_cache = (P[finite_res_mask], R[finite_res_mask])
+        return self._gf_cache
+
     def __E0(self):
         """Calculate zero-point energy from the MF decoupling | E0 = \sum_{ij} J^{eff}_{ij} <cos(theta_i - theta_j)>"""
         l1 = np.repeat(np.arange(-self.l_max, self.l_max+1), self.dim_rotor)
         l2 = np.tile(np.arange(-self.l_max, self.l_max+1), self.dim_rotor)
 
         # Build shift operator | maps |l1,l2> -> |l1+1,l2-1> + |l1-1,l2+1>
-        S = np.zeros((self.dim_rotor**2, self.dim_rotor**2)) 
+        shift_op = np.zeros((self.dim_rotor**2, self.dim_rotor**2)) 
 
         mask = (l1 < self.l_max) & (l2 > -self.l_max) # Filters shifts inside the truncated Hilbert space
-        bra_index = np.where(mask)[0]
-        ket_index = (l1[mask] + self.l_max + 1)*self.dim_rotor + (l2[mask] + self.l_max - 1)
+        bra_index = (l1[mask] + self.l_max + 1)*self.dim_rotor + (l2[mask] + self.l_max - 1)
+        ket_index = np.where(mask)[0]
 
-        S[ket_index, bra_index] = 1.0 # |l1,l2> -> |l1+1,l2-1>
-        S[bra_index, ket_index] = 1.0 # |l1,l2> -> |l1-1,l2+1>
+        shift_op[bra_index, ket_index] = 1.0 # |l1,l2> -> |l1+1,l2-1>
+        shift_op += shift_op.T               # |l1,l2> -> |l1-1,l2+1>
 
-        # Shift energies by GS energy to avoid overflow
-        energies = self.evals_rotor - self.evals_rotor[0]
-        bz = np.exp(-self.beta * energies)
+        bz = helpers._bz_weights(self.evals_rotor, self.beta)
 
         # <psi_n|S|psi_n>        
-        exp_vals = np.real(np.sum(np.conj(self.evecs_rotor) * (S @ self.evecs_rotor), axis=0))
-        E0 = 2 * self.J_eff * np.sum(bz * exp_vals) / (2 * np.sum(bz))
+        exp_vals = np.real(np.sum(np.conj(self.evecs_rotor) * (shift_op @ self.evecs_rotor), axis=0))
+        E0 = 2 * self.J_eff * np.sum(bz * exp_vals) / 2
 
         return E0
     
+    # ====================================================================
+    #   PUBLIC METHODS
+    # ====================================================================
     def get_E_gs(self):
         """Calculate ground-state energy w/o physical subspace projection"""
         E0 = self.__E0()
@@ -86,31 +149,60 @@ class Coupled_Dimer:
         E_gs = 2*E_gs_spinon + E_gs_rotor + E0 # Spinon GS counted twice since it corresponds to 2x2 spin-subspace energy
         return E_gs
     
+    def get_gf(self, z, i=0, j=0):
+        """Calculate Green's function G_ij(z) on complex frequencies z (Matsubara or retarded okay) |
+           Can pass scalar or vector values of z. Returns shape (len(z))"""
+        z = np.atleast_1d(np.asarray(z, dtype=complex)) # If z is a scalar, make array
+        P, R = self.__gf_spectral_data() # Pull residue and pole cache data
+        gf_vals = np.sum(R[None, :, i, j] / (z[:, None] - P[None, :]), axis=1) 
+        return gf_vals
+    
+    def get_gf_matrix(self, z):
+        """Calculate the full 2x2 Green's function matrix at scalar or vector values of z | returns shape (len(z), 2, 2)"""
+        z = np.atleast_1d(np.asarray(z, dtype=complex)) # If z is a scalar, make array
+        P, R = self.__gf_spectral_data() # Pull poles and residues
+        gf_mat = np.sum(R[None, :, :, :]
+                      / (z[:, None, None, None] - P[None, :, None, None]),
+                      axis=1) # Form matrix
+        return gf_mat
+    
+    def get_self_energy_matrix(self, z):
+        """Self-energy from the Dyson equation Sigma(z) = G0(z)^{-1} - G(z)^{-1}"""
+        z = np.atleast_1d(np.asarray(z, dtype=complex))
+
+        h0 = np.array([[self.epsilon_vec[0] - self.mu_phys, -self.t],
+                       [-self.t, self.epsilon_vec[1] - self.mu_phys]])
+        gf_bare = np.linalg.inv(z[:, None, None] * np.eye(2) - h0[None, :, :])
+
+        self_energy_mat = np.linalg.inv(gf_bare) - np.linalg.inv(self.get_gf_matrix(z))
+
+        return self_energy_mat
+    
+    def get_spectral(self, freq_vec, site=0, delta=1e-4):
+        """Calculate site-resolved spectral function output from retarded Green's function"""
+        if site in [0,1]:
+            spectral_vals = -np.imag(self.get_gf(freq_vec + 1j * delta, site, site)) / np.pi
+            return spectral_vals
+        else:
+            raise ValueError(f'Coupled_Dimer.get_spectral | Error: site argument must be 0 or 1')
+    
+    def get_qp_weight(self, site=0, domega=1e-5, delta=1e-4):
+        """Calculate quasiparticle weight Z as a finite difference of the retarded Green's function"""
+        z = np.array([-domega + 1j*delta, domega + 1j*delta])
+        self_energy_vals = self.get_self_energy_matrix(z)[:, site, site]
+        Z = 1.0 / (1.0 - (self_energy_vals[1].real - self_energy_vals[0].real) / (2.0 * domega))
+        return Z
+    
     def get_Z_vec(self):
         """Thermal average of cos(theta_i) at each site | Assume no flux such that <cos(theta)> = <e^{i*theta}>"""
-        energies = self.evals_rotor - self.evals_rotor[0]
-        bz = np.exp(-self.beta * energies)
-
         Z_vec = np.zeros(2)
-
-        l1, l2 = np.repeat(np.arange(-self.l_max, self.l_max+1), self.dim_rotor), np.tile(np.arange(-self.l_max, self.l_max+1), self.dim_rotor)
-    
         for site in range(2):
-            # Create shift operator for respective site
-            S = np.zeros((self.dim_rotor**2, self.dim_rotor**2))
-            if site == 0:
-                mask = l1 < self.l_max
-                bra_index = np.where(mask)[0]
-                ket_index = (l1[mask] + 1 + self.l_max)*self.dim_rotor + (l2[mask] + self.l_max)
-            else:
-                mask = l2 < self.l_max
-                bra_index = np.where(mask)[0]
-                ket_index = (l1[mask] + self.l_max)*self.dim_rotor + (l2[mask] + 1 + self.l_max)
-
-            S[ket_index, bra_index] = 1.0
+            shift_op = self.__shift_op(site) # Create shift operator for respective site
 
             # <l1,l2|e^{i\theta}|l1,l2>
-            exp_vals = np.real(np.sum(np.conj(self.evecs_rotor) * (S @ self.evecs_rotor), axis=0))
-            Z_vec[site] = np.sum(bz * exp_vals) / np.sum(bz)
+            exp_vals = np.real(np.sum(np.conj(self.evecs_rotor) * (shift_op @ self.evecs_rotor), axis=0))
+            
+            bz_weights = helpers._bz_weights(self.evals_rotor)
+            Z_vec[site] = np.sum(bz_weights * exp_vals)
 
         return Z_vec

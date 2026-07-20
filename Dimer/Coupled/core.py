@@ -20,7 +20,7 @@ from Utility import helpers
 # ====================================================================
 
 # ====================================================================
-#   RANDOM FUNCTIONS
+#   COMPUTATIONAL BASIS
 # ====================================================================
 def get_eff_rotor_basis(l_max):
     """Returns |l1,l2> basis elements"""
@@ -42,43 +42,37 @@ def get_eff_rotor_index(l1, l2, l_max):
 #   SPINON SECTOR
 # ====================================================================
 def get_H_spinon(epsilon_vec, h_vec, t_eff, mu):
-    # Return 2x2 Spinon Hamiltonian in a spin subspace
+    """Return 2x2 Spinon Hamiltonian in a spin subspace"""
     H = np.diag(epsilon_vec - h_vec - mu) - np.diag(np.array([t_eff]), k=1) - np.diag(np.array([t_eff]), k=-1)
     return H
 
-def get_t_eff(rotor_evals, rotor_evecs, t, beta, l_max):
-    """
-        Calculates effective spinon tunneling
-    """
+def get_t_eff(evals_rotor, evecs_rotor, t, beta, l_max):
+    """Calculates effective spinon tunneling"""
     dim = 2 * l_max + 1
     l1 = np.repeat(np.arange(-l_max, l_max + 1), dim)
     l2 = np.tile(np.arange(-l_max, l_max + 1), dim)
  
     # Build the shift operator; maps |l1, l2> -> |l1+1,l2-1> + |l1-1,l2+1>
-    S = np.zeros((dim**2, dim**2))
+    shift_op = np.zeros((dim**2, dim**2))
  
     mask = (l1 < l_max) & (l2 > -l_max)
-    bra_index = np.where(mask)[0]
-    ket_index = (l1[mask] + 1 + l_max) * dim + (l2[mask] - 1 + l_max)
+    ket_index = np.where(mask)[0]
+    bra_index = (l1[mask] + 1 + l_max) * dim + (l2[mask] - 1 + l_max)
 
-    S[ket_index, bra_index] = 1.0  # |l1,l2> -> |l1+1,l2-1>
-    S[bra_index, ket_index] = 1.0  # |l1,l2> -> |l1-1,l2+1>
+    shift_op[bra_index, ket_index] = 1.0  # |l1,l2> -> |l1+1,l2-1>
+    shift_op[ket_index, bra_index] = 1.0  # |l1,l2> -> |l1-1,l2+1>
  
-    # Shift energies to avoid overflow
-    energies = rotor_evals - rotor_evals[0]
-    bz = np.exp(-beta * energies)
+    bz_weights = helpers._bz_weights(evals_rotor, beta)
  
     # <psi_n|S|psi_n> for each eigenstate n
-    expectation_vals = np.real(np.sum(np.conj(rotor_evecs) * (S @ rotor_evecs), axis=0))
-    Z = np.sum(bz)
- 
-    t_eff = t * np.sum(bz * expectation_vals) / (2 * Z)
+    expectation_vals = np.real(np.sum(np.conj(evecs_rotor) * (shift_op @ evecs_rotor), axis=0))
+    t_eff = t * np.sum(bz_weights * expectation_vals) / 2
     return t_eff
 
-def get_nf_vec(spinon_evals, spinon_evecs, beta):
+def get_nf_vec(evals_spinon, evecs_spinon, beta):
     """Calculates spinon occupation at every site"""
-    fd_vals = helpers.fermi_dirac(spinon_evals, beta)
-    nf_vec = 2 * np.abs(spinon_evecs)**2 @ fd_vals
+    fd_vals = helpers._fermi(evals_spinon, beta)
+    nf_vec = 2 * np.abs(evecs_spinon)**2 @ fd_vals
     return nf_vec
 
 # ====================================================================
@@ -94,8 +88,8 @@ def get_H_rotor(U, h_vec, J_eff, l_max):
     H = np.diag(U / 2 * (l1**2 + l2**2) + h_vec[0] * l1 + h_vec[1] * l2)
 
     mask = (l1 < l_max) & (l2 > -l_max) # Filters valid neighbors for shifting
-    bra_index = np.where(mask)[0]
-    ket_index = (l1[mask] + l_max + 1)*dim + (l2[mask] + l_max - 1)
+    ket_index = np.where(mask)[0]
+    bra_index = (l1[mask] + l_max + 1) * dim + (l2[mask] + l_max - 1)
 
     # Fills out off-diagonal elements for bra->ket
     H[bra_index, ket_index] -= J_eff
@@ -103,30 +97,29 @@ def get_H_rotor(U, h_vec, J_eff, l_max):
 
     return H
 
-def get_J_eff(spinon_evals, spinon_evecs, t, beta):
+def get_J_eff(evals_spinon, evecs_spinon, t, beta):
     """Calculates J^{eff}_{12} | <f^+_1 f_2> calculated by diagaonlization then FD distribution"""
-    J_eff = 2 * t * np.sum(np.conj(spinon_evecs[0,:]) * spinon_evecs[1, :] * helpers.fermi_dirac(spinon_evals, beta))
+    J_eff = 2 * t * np.sum(np.conj(evecs_spinon[0,:]) * evecs_spinon[1, :] * helpers._fermi(evals_spinon, beta))
     return J_eff
 
-def get_L(rotor_evals, rotor_evecs, beta, l_max, site):
+def get_L(evals_rotor, evecs_rotor, beta, l_max, site):
     """Calculates thermal average <L_i> at one site"""
-    energies = rotor_evals - rotor_evals[0] # Shift energies by GS to prevent overflow
-    bz = np.exp(-beta * energies)
+    bz_weights = helpers._bz_weights(evals_rotor, beta)
 
     basis = get_eff_rotor_basis(l_max)
     l_vals = basis[:, site].astype(float)
  
     # <psi_n|L|\psi_n>
-    exp_vals = l_vals @ np.abs(rotor_evecs)**2
+    exp_vals = l_vals @ np.abs(evecs_rotor)**2
  
-    L = np.sum(bz * exp_vals) / np.sum(bz)
+    L = np.sum(bz_weights * exp_vals)
     return L
  
-def get_L_vec(rotor_evals, rotor_evecs, beta, l_max):
+def get_L_vec(evals_rotor, evecs_rotor, beta, l_max):
     """Calculate thermal average <L_i> at every site"""
     L_vec = np.zeros(2)
     for site in range(2):
-        L_vec[site] = get_L(rotor_evals, rotor_evecs, beta, l_max, site)
+        L_vec[site] = get_L(evals_rotor, evecs_rotor, beta, l_max, site)
     return L_vec
 
 # ====================================================================
