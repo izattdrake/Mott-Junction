@@ -21,7 +21,7 @@ def get_nf_vec(evals_spinon, evecs_spinon, beta, N_at=2):
         sum = 0.0
         for j in range(2):
             energy = evals_spinon[j]
-            sum += (np.abs(evecs_spinon[i,j]) ** 2) * helpers.fermi_dirac(energy, beta)
+            sum += (np.abs(evecs_spinon[i,j]) ** 2) * helpers._fermi(energy, beta)
 
         nf[i] = N_at * sum
 
@@ -73,14 +73,11 @@ def get_rotor_eig_vec(U, h_vec, K_vec, l_max):
 
 def get_L(evals_rotor, evecs_rotor, beta, l_max):
     """Calculate thermal average <L_i> at site | arguemnts are the rotor eigenvalues and eigenvectors at that site"""
-    energies = evals_rotor - evecs_rotor[0]
-
-    bz = np.exp(-beta * energies)
-
     l_vals = np.arange(-l_max, l_max + 1)
     l_expect_per_state = np.sum((np.abs(evecs_rotor)**2) * l_vals[:,np.newaxis], axis=0)
 
-    L = np.dot(bz, l_expect_per_state) / np.sum(bz)
+    bz_weights = helpers._bz_weights(evals_rotor, beta)
+    L = np.dot(bz_weights, l_expect_per_state)
     return L
 
 def get_L_vec(evals_rotor_vec, evecs_rotor_vec, beta, l_max):
@@ -94,19 +91,17 @@ def get_Z_vec(evals_rotor_vec, evecs_rotor_vec, beta):
     """Calculate Z at every site"""
     Z_vec = np.zeros(2)
     for i in range(2):
-        evals_rotor = evals_rotor_vec[i] - evals_rotor_vec[i,0]
-        evecs_rotor = evecs_rotor_vec[i]
-
-        bz = np.exp(-beta * evals_rotor)
+        evals_rotor, evecs_rotor = evals_rotor_vec[i], evecs_rotor_vec[i]
+        bz_weights = helpers._bz_weights(evals_rotor, beta)
         mel = (evecs_rotor[:-1, :].conj() * evecs_rotor[1:, :]).sum(axis=0)
 
-        Z_vec[i] = (np.dot(bz, mel) / np.sum(bz))**2
+        Z_vec[i] = np.dot(bz_weights, mel)**2
 
     return Z_vec
 
 def get_K_vec(t_mat, Z_vec, evals_spinon, evecs_spinon, beta, N_at=2):
     """Calculate K values at every site"""
-    fd = np.array([helpers.fermi_dirac(energy, beta) for energy in evals_spinon])
+    fd = np.array([helpers._fermi(energy, beta) for energy in evals_spinon])
     evecs_weighted = evecs_spinon * fd[np.newaxis,:]
 
     sqrt_Z = np.sqrt(Z_vec)
