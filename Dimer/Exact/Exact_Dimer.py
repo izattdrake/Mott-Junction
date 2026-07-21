@@ -1,5 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import sys
+
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from Utility import helpers
 
 # ====================================================================
 #   Fermionic operators w/ Jordan-Wigner string construction
@@ -21,10 +26,9 @@ import matplotlib.pyplot as plt
 #   solves for the eigenspace solutions, then each method takes in the
 #   temperature, etc, and solves for the observables.
 # ====================================================================
-
 a_ann = np.array([[0., 1.], [0., 0.]])     # annihilation on one mode
 pauli_z = np.diag([1., -1.])               # (-1)^n string factor
-id = np.eye(2)                       # Identity operator
+id = np.eye(2)                             # Identity operator
 
 def kronecker_matrix(*mats):
     out = mats[0]
@@ -64,7 +68,6 @@ def mode(site, spin):
 #   symbolic, for easy computation. 
 #   mu = U/2
 # ====================================================================
-
 class Exact_Dimer:
     def __init__(self, epsilon, t, U, mu):
         self.eps_vec = np.array([-epsilon, epsilon])
@@ -77,76 +80,67 @@ class Exact_Dimer:
             n_down = c_cre[mode(site, 1)] @ c_ann[mode(site, 1)]
             H += (self.eps_vec[site] - mu) * (n_up + n_down) + U * n_up @ n_down
         for spin in (0, 1):
-            hop = c_cre[mode(0, spin)] @ c_ann[mode(1, spin)]
-            H += -t * (hop + hop.T)
+            tun = c_cre[mode(0, spin)] @ c_ann[mode(1, spin)] # tunneling operators
+            H += -t * (tun + tun.T)
+
         self.evals, self.evecs = np.linalg.eigh(H)
-
-    def get_bz_weights(self, beta):
-        """Calculates boltzmann probabilities"""
-        if beta is None:                          
-            bz = (self.evals - self.evals[0] < 1e-10).astype(float) # Lock all weight to the GS
-        else:
-            bz = np.exp(-beta * (self.evals - self.evals[0]))
-
-        return bz / bz.sum()
 
     def get_gf(self, i, j, z, beta=None, spin=0):
         """Calculate Green's functions with the spectral representation | z can be Matsubara or retarded"""
-        weights = self.get_bz_weights(beta)
+        z = np.atleast_1d(np.asarray(z, dtype=complex))
+
+        bz = helpers._bz_weights(self.evals, beta)
 
         Mi = self.evecs.T @ c_ann[mode(i, spin)] @ self.evecs    # <m|c_i|n>
         Lj = self.evecs.T @ c_cre[mode(j, spin)] @ self.evecs    # <m|c_j^+|n>
 
-        res = Mi * Lj.T * (weights[:, None] + weights[None, :])  # residues [m,n]
+        res = Mi * Lj.T * (bz[:, None] + bz[None, :])            # residues [m,n]
         pol = self.evals[None, :] - self.evals[:, None]          # poles E_n - E_m
 
-        z = np.atleast_1d(np.asarray(z, dtype=complex))
-
-        return ((res.ravel()[None, :] / (z[:, None] - pol.ravel()[None, :])).sum(axis=1))
+        gf_vals = np.sum(res.ravel()[None, :] / (z[:, None] - pol.ravel()[None, :]), axis=1)
+        return gf_vals
 
     def get_gf_mat(self, z, beta=None):
         """Calculate 2x2 Green's function matrix for the entire dimer"""
         z = np.atleast_1d(np.asarray(z, dtype=complex))
-        G_mat = np.empty((len(z), 2, 2), dtype=complex)
+        gf_mat = np.empty((len(z), 2, 2), dtype=complex)
 
         for i in (0, 1):
             for j in (0, 1):
-                G_mat[:, i, j] = self.get_gf(i, j, z, beta)
+                gf_mat[:, i, j] = self.get_gf(i, j, z, beta)
 
-        return G_mat
+        return gf_mat
 
-    def matsubara(self, beta, n_max=40):
-        """Return array of fermionic Matsubara frequencies"""
-        return 1j * (2 * np.arange(n_max) + 1) * np.pi / beta
-
-    def get_self_energy(self, z, beta=None):
+    def get_self_energy_matrix(self, z, beta=None):
         """Calculate self-energy from Dyson's equation"""
+        z = np.atleast_1d(np.asarray(z, dtype=complex))
         h0 = np.array([[self.eps_vec[0] - self.mu, -self.t],    # Single-particle Hamiltonian
                        [-self.t, self.eps_vec[1] - self.mu]])
         
-        z = np.atleast_1d(np.asarray(z, dtype=complex))
-        G0 = np.linalg.inv(z[:, None, None] * np.eye(2) - h0)
+        gf_bare = np.linalg.inv(z[:, None, None] * np.eye(2) - h0)
+        self_energy_mat = np.linalg.inv(gf_bare) - np.linalg.inv(self.get_gf_mat(z, beta))
+        return self_energy_mat
 
-        self_energy = np.linalg.inv(G0) - np.linalg.inv(self.get_gf_mat(z, beta))
-        return self_energy
-
-    def qp_weight(self, site=0, beta=None, d=1e-4):
+    def get_qp_weight(self, site=0, beta=None, domega=1e-4, delta=1e-4):
         """Calculate QP weight from retarded GF | Uses finite difference method"""
-        self_energy = self.get_self_energy(np.array([-d + 1e-6j, d + 1e-6j]), beta)[:, site, site]
-        return 1.0 / (1.0 - (self_energy[1].real - self_energy[0].real) / (2 * d))
+        self_energy = self.get_self_energy_matrix(np.array([-domega + 1j*delta, domega + 1j*delta]), beta)[:, site, site]
+        Z = 1.0 / (1.0 - (self_energy[1].real - self_energy[0].real) / (2 * domega))
+        return Z
 
     def qp_weight_matsubara(self, beta, site=0):
-        """
-        Calculates quasiparticle weight with Matsubara self-energy
-        Used to check retarded self-energy approach
-        """
-        w0 = np.pi / beta
-        self_energy = self.get_self_energy(np.array([1j * w0]), beta)[0, site, site]
-        return 1.0 / (1.0 - self_energy.imag / w0)
+        """Calculates quasiparticle weight with Matsubara self-energy.
+        Used to check retarded self-energy approach."""
+        if beta is None:
+            raise ValueError('Dimer/Exact/Exact_Dimer.qp_weight_matsubara | Error: beta must be finite')
+        
+        w0 = np.pi / beta                                                                       # Approximation for w0 = 0, not a Matsubara freq
+        self_energy = self.get_self_energy_matrix(np.array([1j * w0]), beta)[0, site, site]     # Evaluate self energy at that point
+        qp_weight = 1.0 / (1.0 - self_energy.imag / w0)
+        return qp_weight
 
     def get_occupation(self, beta=None):
         """Calculate electron occupation at every site"""
-        bz_weights = self.get_bz_weights(beta)
+        bz_weights = helpers._bz_weights(self.evals, beta)
         n = np.zeros(2)
         for site in range(2):
             for spin in range(2):
