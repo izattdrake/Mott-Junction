@@ -36,113 +36,229 @@ from Utility import helpers
 
 class Coupled_Dimer:
     def __init__(self, epsilon, U, t, beta, l_max, N_target=2, ITERATION=0):
-        self.epsilon_vec = np.array([-epsilon/2.0, epsilon/2.0]) # Even/opposite doping to preserve PHS, restricts chem. pot.
-        self.U, self.t, self.beta, self.l_max, self.N_target = U, t, beta, l_max, N_target
+        self._epsilon_vec = np.array([-epsilon/2.0, epsilon/2.0]) # Even/opposite doping to preserve PHS, restricts chem. pot.
+        self._U, self._t, self._beta, self._l_max, self._N_target = U, t, beta, l_max, N_target
         
-        self.dim_rotor = 2*l_max + 1 # Dimension for one site, full rotor Hilbert space is dim**2
+        self._dim = 2*l_max + 1 # Dimension for one site; rotor Hilbert space is dim**2
 
-        t_eff_guess = 0.8 * self.t
-        J_eff_guess = 0.5 * self.t
-        h_vec_guess = -self.epsilon_vec
+        t_eff_guess = 0.8 * t
+        J_eff_guess = 0.5 * t
+        h_vec_guess = -self._epsilon_vec
 
         if ITERATION == 0: # Iteration w/ Newton's method & gauge fix
-            self.evals_spinon, self.evecs_spinon, self.evals_rotor, self.evecs_rotor, self.h_vec, self.t_eff, self.J_eff, self.nf_vec, self.L_vec, self.mu, self.count = iterate_newton_gauge(self.epsilon_vec, self.U, self.t, h_vec_guess, t_eff_guess, 
-                                                                                                                                                                                              J_eff_guess, self.beta, self.l_max, self.N_target)
+            (self._evals_spinon, self._evecs_spinon, self._evals_rotor, 
+             self._evecs_rotor, self._h_vec, self._t_eff, self._J_eff, 
+             self._nf_vec, self._L_vec, self._mu, self._count) = iterate_newton_gauge(self._epsilon_vec, self._U, self._t, h_vec_guess, t_eff_guess, 
+                                                                                      J_eff_guess, self._beta, self._l_max, self._N_target)
+                                                                                                                                                                                              
         elif ITERATION == 1: # Iteration w/ modified Broyden's method
-            self.evals_spinon, self.evecs_spinon, self.evals_rotor, self.evecs_rotor, self.h_vec, self.t_eff, self.J_eff, self.nf_vec, self.L_vec, self.mu, self.count = iterate_broyden(self.epsilon_vec, self.U, self.t, h_vec_guess, t_eff_guess, 
-                                                                                                                                                                                         J_eff_guess, self.beta, self.l_max, self.N_target)
+            (self._evals_spinon, self._evecs_spinon, self._evals_rotor, 
+            self._evecs_rotor, self._h_vec, self._t_eff, self._J_eff,
+            self._nf_vec, self._L_vec, self._mu, self._count) = iterate_broyden(self._epsilon_vec, self._U, self._t, h_vec_guess, t_eff_guess, 
+                                                                                J_eff_guess, self._beta, self._l_max, self._N_target)
         else:
             raise ValueError('Coupled_Dimer.__init__ | ERROR: ITERATION argument')
 
         """Add U/2 shift missing from (U/2)L^2 representation of the interaction.
         Note that U/2 is only the correct shift in PHS systems, that is half-filling
         with even-and-opposite doping on either site."""
-        self.mu_phys = self.mu + self.U / 2.0 # Account for U/2 shift in SR formalism
+        self._mu_phys = self._mu + self._U / 2.0 
     
     # ====================================================================
     #   PRIVATE METHODS
     # ====================================================================
+    def __shift_op(self, site):
+        """Matrix of e^{i theta_j} in the |l1,l2> basis"""
+        l1 = np.repeat(np.arange(-self._l_max, self._l_max+1), self._dim)
+        l2 = np.tile(np.arange(-self._l_max, self._l_max+1), self._dim)
+
+        shift_op = np.zeros((self._dim**2, self._dim**2))
+        if site == 0:
+            mask = l1 < self._l_max
+            bra_index = (l1[mask]+self._l_max+1)*self._dim + (l2[mask]+self._l_max)
+        elif site == 1:
+            mask = l2 < self._l_max
+            bra_index = (l1[mask]+self._l_max)*self._dim + (l2[mask]+self._l_max+1)
+
+        ket_index = np.where(mask)[0]
+        shift_op[bra_index, ket_index] = 1.0
+
+        return shift_op
+
+    def __jw_ops(self):
+        """Jordan-Wigner electron operators on the 16-dim Fock space.
+        Mode ordering: 0:1up 1:1down 2:2up 3:2down."""
+        if hasattr(self, '_jw_cache'):
+            return self._jw_cache
+        
+        a_ann = np.array([[0., 1.], [0., 0.]])
+        pauli_z = np.diag([1., -1.])
+        I = np.eye(2)
+
+        def kron_matrix(*mats):
+            out = mats[0]
+            for mat in mats[1:]:
+                out = np.kron(out, mat)
+            return out
+        
+        c_ann = [kron_matrix(a_ann, I, I, I), 
+                kron_matrix(pauli_z, a_ann, I, I),
+                kron_matrix(pauli_z, pauli_z, a_ann, I), 
+                kron_matrix(pauli_z, pauli_z, pauli_z, a_ann)]
+        
+        self._jw_cache = (c_ann, [mat.T for mat in c_ann])
+
+        return self._jw_cache
+
+    def __H_exact(self):
+        """Exact Hubbard H (bare), number operator N, and the
+        eigendecomposition of K = H - mu_phys*N | cached"""
+        if hasattr(self, '_H_exact_cache'):
+            return self._H_exact_cache
+        
+        mode = lambda site, spin: 2 * site + spin
+        c_ann, c_cre = self.__jw_ops()
+
+        H, N_op = np.zeros((16, 16)), np.zeros((16, 16))
+
+        for site in range(2):
+            n_up = c_cre[mode(site, 0)] @ c_ann[mode(site, 0)] # number operator c^+_i c_i
+            n_down = c_cre[mode(site, 1)] @ c_ann[mode(site, 1)]
+            
+            H += self._epsilon_vec[site] * (n_up + n_down) + self._U * (n_up @ n_down)
+            N_op += n_up + n_down
+
+        for spin in range(2):
+            tun = c_cre[mode(0, spin)] @ c_ann[mode(1, spin)] # tunneling operator c^+_j c_j
+            H += -self._t * (tun + tun.T)
+
+        evals_K, evecs_K = np.linalg.eigh(H - self._mu_phys * N_op)
+        self._H_exact_cache = (H, N_op, evals_K, evecs_K)
+
+        return self._H_exact_cache
+ 
+    def __gs_proj(self):
+        """Projected MF ground state as a normalized 16-dim Fock vector,
+        plus its weight <Psi|P|Psi> in the physical subspace."""
+        if hasattr(self, '_proj_cache'):
+            return self._proj_cache
+        
+        mode = lambda site, spin: 2 * site + spin
+        _, c_cre = self.__jw_ops()
+
+        #rojected state in the full 16-dim Fock space
+        proj_state = np.zeros(16)
+
+        #Spinon sector
+        spinon_state = np.zeros(16); spinon_state[0] = 1.0 # 16-dim Slater det. spinon state
+        evec_spinon_gs = self._evecs_spinon[:,0]
+        for spin in range(2):
+            spinon_state = (evec_spinon_gs[0] * c_cre[mode(0, spin)] + evec_spinon_gs[1] * c_cre[mode(1, spin)]) @ spinon_state
+            
+        #Rotor sector
+        evec_rotor_gs = self._evecs_rotor[:,0]
+        for i in range(16):
+            if np.abs(spinon_state[i]) < 1e-15:
+                continue
+            
+            n1 = ((i >> 3) & 1) + ((i >> 2) & 1) 
+            n2 = ((i >> 1) & 1) + (i & 1)       
+
+            # computational index of basis elements satisfying the gauge constraint     
+            phys_index = (n1 - 1 + self._l_max) * self._dim + (n2 - 1 + self._l_max) 
+            proj_state[i] = spinon_state[i] * evec_rotor_gs[phys_index]
+
+        self._proj_cache = proj_state / np.sqrt(float(proj_state @ proj_state))
+
+        return self._proj_cache
+
     def __E0(self):
         """Calculate zero-point energy from the MF decoupling | E0 = \sum_{ij} J^{eff}_{ij} <cos(theta_i - theta_j)>"""
-        l1 = np.repeat(np.arange(-self.l_max, self.l_max+1), self.dim_rotor)
-        l2 = np.tile(np.arange(-self.l_max, self.l_max+1), self.dim_rotor)
+        if hasattr(self, '_E0_cache'):
+            return self._E0_cache
+        
+        l1 = np.repeat(np.arange(-self._l_max, self._l_max+1), self._dim)
+        l2 = np.tile(np.arange(-self._l_max, self._l_max+1), self._dim)
 
         # Build shift operator | maps |l1,l2> -> |l1+1,l2-1> + |l1-1,l2+1>
-        shift_op = np.zeros((self.dim_rotor**2, self.dim_rotor**2)) 
+        shift_op = np.zeros((self._dim**2, self._dim**2)) 
 
-        mask = (l1 < self.l_max) & (l2 > -self.l_max) # Filters shifts inside the truncated Hilbert space
-        bra_index = (l1[mask] + self.l_max + 1)*self.dim_rotor + (l2[mask] + self.l_max - 1)
+        mask = (l1 < self._l_max) & (l2 > -self._l_max) # Filters shifts inside the truncated Hilbert space
+        bra_index = (l1[mask] + self._l_max + 1)*self._dim + (l2[mask] + self._l_max - 1)
         ket_index = np.where(mask)[0]
 
         shift_op[bra_index, ket_index] = 1.0 # |l1,l2> -> |l1+1,l2-1>
         shift_op += shift_op.T               # |l1,l2> -> |l1-1,l2+1>
 
-        bz = helpers._bz_weights(self.evals_rotor, self.beta)
+        bz = helpers._bz_weights(self._evals_rotor, self._beta)
 
         # <psi_n|S|psi_n>        
-        exp_vals = np.real(np.sum(np.conj(self.evecs_rotor) * (shift_op @ self.evecs_rotor), axis=0))
-        E0 = 2 * self.J_eff * np.sum(bz * exp_vals) / 2
+        exp_vals = np.real(np.sum(np.conj(self._evecs_rotor) * (shift_op @ self._evecs_rotor), axis=0))
+        E0 = 2 * self._J_eff * np.sum(bz * exp_vals) / 2
+        self._E0_cache = E0
 
-        return E0
-    
-    def __shift_op(self, site):
-        """Matrix of e^{i theta_j} in the |l1,l2> basis"""
-        l1 = np.repeat(np.arange(-self.l_max, self.l_max+1), self.dim_rotor)
-        l2 = np.tile(np.arange(-self.l_max, self.l_max+1), self.dim_rotor)
-
-        shift_op = np.zeros((self.dim_rotor**2, self.dim_rotor**2))
-        if site == 0:
-            mask = l1 < self.l_max
-            bra_index = (l1[mask] + self.l_max + 1)*self.dim_rotor + (l2[self.dim_rotor] + self.l_max)
-        elif site == 1:
-            mask = l2 < self.l_max
-            bra_index = (l1[mask] + self.l_max) * self.dim_rotor + (l2[mask] + self.l_max + 1)
-
-        ket_index = np.where(mask)[0]
-        shift_op[bra_index, ket_index] = 1.0
-        return shift_op
-    
-    def __gf_spectral_data(self, tol=1e-12):
+        return self._E0_cache
+        
+    def __gf_spectral_data(self, tol=1e-13):
         """Calculate Green's function data. Poles P_k, residues R_k[i,j] with G_ij(z) = sum_k R_k[i,j]/(z-P_k).
             Cached and saved on first call. Used for quickly calculating values."""
         if hasattr(self, '_gf_cache'):
             return self._gf_cache
         
         # Rotor matrix elements: <m|e^{i\theta_j}|n>
-        mel_rotor = np.stack([self.evecs_rotor.T @ self.__shift_op(site) @ self.evecs_rotor for site in range(2)])
-
-        dE_rotor = self.evals_rotor[:, None] - self.evals_rotor[None, :]
-
-        bz_rotor = helpers._bz_weights(self.evals_rotor, self.beta)     # Rotor boltzmann probabilities
+        mel_rotor = np.stack([self._evecs_rotor.T @ self.__shift_op(site) @ self._evecs_rotor for site in range(2)])
+        dE_rotor = self._evals_rotor[:, None] - self._evals_rotor[None, :]
+        bz_rotor = helpers._bz_weights(self._evals_rotor, self._beta)     # Rotor boltzmann probabilities
         p_rotor_ket, p_rotor_bra = bz_rotor[None, :], bz_rotor[:, None] 
 
         pole_vec, res_vec = [], []
         for i in range(2):
-            fd_spinon_vals = helpers._fermi(self.evals_spinon[i])
+            fd_spinon_vals = helpers._fermi(self._evals_spinon[i], self._beta)
             
-            sr_mix = fd_spinon_vals * p_rotor_bra + (1.0 - fd_spinon_vals) * p_rotor_ket # Convolution of spinon/rotor
-            spinon_coeff = self.evecs_spinon[:,i] # spinon state coefficients
+            sr_mix = fd_spinon_vals * p_rotor_bra + (1.0 - fd_spinon_vals) * p_rotor_ket    # Convolution of spinon/rotor GF's
+            spinon_coeff = self._evecs_spinon[:,i]                                           # spinon state coefficients
 
             R = np.einsum('i,j,inm,jnm,nm->nmij', spinon_coeff, spinon_coeff, mel_rotor, mel_rotor, sr_mix)
             
-            pole_vec.append(self.evals_spinon[i] + dE_rotor.ravel())
+            pole_vec.append(self._evals_spinon[i] + dE_rotor.ravel())
             res_vec.append(R.reshape(-1, 2, 2))
 
         P, R = np.concatenate(pole_vec), np.concatenate(res_vec)
         finite_res_mask = np.abs(R).max(axis=(1, 2)) > tol # Throw away vanishing residues (matrix elements vanish)
         self._gf_cache = (P[finite_res_mask], R[finite_res_mask])
-        
         return self._gf_cache
     
     # ====================================================================
     #   PUBLIC METHODS
     # ====================================================================
-    def get_E_gs(self):
+    def get_E_gs(self, grand_canonical=False):
         """Calculate ground-state energy w/o physical subspace projection"""
         E0 = self.__E0()
-        E_gs_spinon, E_gs_rotor = self.evals_spinon[0], self.evals_rotor[0]
+        E_gs_spinon, E_gs_rotor = self._evals_spinon[0], self._evals_rotor[0]
         E_gs = 2*E_gs_spinon + E_gs_rotor + E0 # Spinon GS counted twice since it corresponds to 2x2 spin-subspace energy
+        
+        if grand_canonical:
+            E_gs -= self._U # -mu*N
+
         return E_gs
+    
+    def get_E_gs_proj(self, grand_canonical=False):
+        """Calculate ground-state energy as the expected value of
+        the MF ground state projected onto the physical subspace.
+        Effectively a trial wavefunction using the variational 
+        principle, guarenteed."""
+        H, N_op, _, _ = self.__H_exact()
+        proj_state = self.__gs_proj()
+
+        E_proj = float(proj_state @ H @ proj_state)
+        if grand_canonical:
+            E_proj -= self._mu_phys * float(proj_state @ N_op @ proj_state)
+
+        return E_proj
+
+    def get_occupation_vec(self):
+        """Get spinon/electron occupation at each lattice site."""
+        return self._nf_vec
     
     def get_gf(self, z, i=0, j=0):
         """Calculate Green's function G_ij(z) on complex frequencies z (Matsubara or retarded okay) |
@@ -166,39 +282,57 @@ class Coupled_Dimer:
         Hartree shift seen in exact diagonalization benchmark"""
         z = np.atleast_1d(np.asarray(z, dtype=complex))
 
-        h0 = np.array([[self.epsilon_vec[0] - self.mu_phys, -self.t],
-                       [-self.t, self.epsilon_vec[1] - self.mu_phys]])
+        h0 = np.array([[self._epsilon_vec[0] - self._mu_phys, -self._t],
+                       [-self._t, self._epsilon_vec[1] - self._mu_phys]])
         gf_bare = np.linalg.inv(z[:, None, None] * np.eye(2) - h0[None, :, :])
-
         self_energy_mat = np.linalg.inv(gf_bare) - np.linalg.inv(self.get_gf_matrix(z))
-
         return self_energy_mat
     
-    def get_spectral(self, freq_vec, site=0, delta=1e-4):
+    def get_spectral_vec(self, freqs, imag_delta=1e-4):
         """Calculate site-resolved spectral function output from retarded Green's function"""
-        if site in (0,1):
-            spectral_vals = -np.imag(self.get_gf(freq_vec + 1j * delta, site, site)) / np.pi
-            return spectral_vals
-        else:
-            raise ValueError(f'Coupled_Dimer.get_spectral | Error: site argument must be 0 or 1')
+        freqs = np.real(freqs)
+        spectral_vec = np.zeros((len(freqs),2))
+
+        for site in range(2):
+            spectral_vals = -np.imag(self.get_gf(freqs + 1j * imag_delta, site, site)) / np.pi
+            spectral_vec[:,site] = spectral_vals
+            
+        return spectral_vec
     
-    def get_qp_weight(self, site=0, domega=1e-5, delta=1e-4):
+    def get_qp_vec(self, domega=1e-5, delta=1e-4):
         """Calculate quasiparticle weight Z as a finite difference of the retarded Green's function"""
-        z = np.array([-domega + 1j*delta, domega + 1j*delta])
-        self_energy_vals = self.get_self_energy_matrix(z)[:, site, site]
-        Z = 1.0 / (1.0 - (self_energy_vals[1].real - self_energy_vals[0].real) / (2.0 * domega))
-        return Z
-    
-    def get_Z_vec(self):
-        """Thermal average of cos(theta_i) at each site | Assume no flux such that <cos(theta)> = <e^{i*theta}>"""
         Z_vec = np.zeros(2)
+        z = np.array([-domega + 1j*delta, domega + 1j*delta])
+
+        for site in range(2):
+            self_energy_vals = self.get_self_energy_matrix(z)[:, site, site]
+            Z = 1.0 / (1.0 - (self_energy_vals[1].real - self_energy_vals[0].real) / (2.0 * domega))
+            Z_vec[site] = Z
+
+        return Z_vec
+    
+    def get_exp_shift_vec(self):
+        """Thermal average of cos(theta_i) at each site | Assume no flux such that <cos(theta)> = <e^{i*theta}>.
+        Gives zero everytime due to symmetry but... why not"""
+        Z_vec = np.zeros(2)
+
         for site in range(2):
             shift_op = self.__shift_op(site) # Create shift operator for respective site
-
-            # <l1,l2|e^{i\theta}|l1,l2>
-            exp_vals = np.real(np.sum(np.conj(self.evecs_rotor) * (shift_op @ self.evecs_rotor), axis=0))
-            
-            bz = helpers._bz_weights(self.evals_rotor)
+            exp_vals = np.real(np.sum(np.conj(self._evecs_rotor) * (shift_op @ self._evecs_rotor), axis=0))
+            bz = helpers._bz_weights(self._evals_rotor)
             Z_vec[site] = np.sum(bz * exp_vals)
 
         return Z_vec
+
+    def check_gf_sum(self):
+        """Residues should sum to 1 at each site"""
+        _, R = self.__gf_spectral_data()
+        sum = np.array([R[:, 0, 0].sum(), R[:, 1, 1].sum()])
+        return sum
+
+    def get_proj_fidelity(self):
+        """Calculates projection of exact GS onto MF projected ground state <P Psi|Exact>"""
+        _, _, _, evecs_K = self.__H_exact()
+        proj_state = self.__gs_proj()
+        fidelity = abs(proj_state @ evecs_K[:, 0])
+        return fidelity
