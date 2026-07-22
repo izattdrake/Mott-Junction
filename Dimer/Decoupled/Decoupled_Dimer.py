@@ -34,7 +34,7 @@ class Decoupled_Dimer:
         self.t_mat = np.array([[0,t], [t,0]])
         self.U, self.beta, self.l_max, self.N_target, self.N_at = U, beta, l_max, N_target, N_at
 
-        self.dim = 2 * l_max + 1 # Dimension for one site
+        self.dim = 2*l_max + 1 # Dimension for one site
 
         t_eff_mat_guess = 0.9 * self.t_mat
         h_vec_guess = -self.epsilon_vec
@@ -69,7 +69,7 @@ class Decoupled_Dimer:
     
     def __shift_op(self):
         """Shift operator e^{i theta_j} in the |l> basis"""
-        shift_op = np.zeros((self.dim, self.rotor_dmi))
+        shift_op = np.zeros((self.dim, self.dim))
         shift_op[np.arange(1, self.dim), np.arange(0, self.dim - 1)] = 1.0
         return shift_op
     
@@ -89,7 +89,7 @@ class Decoupled_Dimer:
         # shift on the full product space, then rotate to the product eigenbasis
         prod_states = np.kron(evecs_rotor_0, evecs_rotor_1)                     
 
-        S, I = self.__shift_op(), I = np.eye(self.dim)
+        S, I = self.__shift_op(), np.eye(self.dim)
         mel_vec = [prod_states.T @ np.kron(S, I) @ prod_states,       # e^{+i th_1} = S x I
                    prod_states.T @ np.kron(I, S) @ prod_states]       # e^{+i th_2} = I x S
         
@@ -114,7 +114,6 @@ class Decoupled_Dimer:
             sr_mix = (1.0 - fd_spinon_vals) * p_rotor_ket + fd_spinon_vals * p_rotor_bra          # mix[n,m]
             spinon_coeff = self.evecs_spinon[:, i]
 
-            # R[n,m,i,j] = phi_i phi_j <n|e^{ith_i}|m><n|e^{ith_j}|m> mix[n,m]
             R = np.einsum('i,j,inm,jnm,nm->nmij', spinon_coeff, spinon_coeff, mel_vec, mel_vec, sr_mix)
             
             pole_vec.append(self.evals_spinon[i] + dE.ravel())
@@ -123,7 +122,6 @@ class Decoupled_Dimer:
         P, R = np.concatenate(pole_vec), np.concatenate(res_vec)
         finite_res_mask = np.abs(R).max(axis=(1, 2)) > tol
         self._gf_cache = (P[finite_res_mask], R[finite_res_mask])
-
         return self._gf_cache
     
     # ====================================================================
@@ -136,7 +134,11 @@ class Decoupled_Dimer:
         E_gs = 2*E_gs_spinon + np.sum(E_gs_rotor_vec) + E0
         return E_gs
     
-    def get_rotor_gs(self, theta_vals, site):
+    def get_occupation_vec(self):
+        """Get spinon/electron occupation at each lattice site."""
+        return self.nf_vec
+    
+    def rotor_gs(self, theta_vals, site):
         """Calculates rotor ground state output in the exp(i l theta) basis"""
         l_vals = np.arange(-self.l_max, self.l_max + 1)
         evec_rotor_gs = self.evecs_rotor_vec[site][:,0]
@@ -171,18 +173,31 @@ class Decoupled_Dimer:
 
         return self_energy_mat
 
-    def get_spectral(self, freq_vec, site=0, delta=1e-4):
+    def get_spectral_vec(self, freqs, imag_delta=1e-4):
         """Calculate site-resolved spectral function"""
-        if site in (0,1):
-            spectral_vals = -np.imag(self.get_gf(freq_vec + 1j * delta, site, site)) / np.pi
-            return spectral_vals
-        else:
-            raise ValueError(f'Decoupled_Dimer.get_spectral | Error: site argument must be 0 or 1')
+        freqs = np.real(freqs)
+        spectral_vec = np.zeros((len(freqs),2))
 
-    def get_qp_weight(self, site=0, domega=1e-5, delta=1e-4):
+        for site in range(2):
+            spectral_vals = -np.imag(self.get_gf(freqs + 1j*imag_delta, site, site)) / np.pi
+            spectral_vec[:,site] = spectral_vals
+
+        return spectral_vec
+
+    def get_qp_vec(self, domega=1e-5, imag_delta=1e-4):
         """Calculate quasiparticle weight Z as a finite difference of the retarded Green's function"""
-        z = np.array([-domega + 1j * delta, domega + 1j * delta])
-        self_energy_vals = self.get_self_energy_matrix(z)[:, site, site]
-        Z = 1.0 / (1.0 - (self_energy_vals[1].real - self_energy_vals[0].real) / (2.0 * domega))
-        return Z
+        Z_vec = np.zeros(2)
+        z = np.array([-domega + 1j * imag_delta, domega + 1j * imag_delta])
+        
+        for site in range(2):
+            self_energy_vals = self.get_self_energy_matrix(z)[:, site, site]
+            Z = 1.0 / (1.0 - (self_energy_vals[1].real - self_energy_vals[0].real) / (2.0 * domega))
+            Z_vec[site] = Z
+
+        return Z_vec
  
+    def check_gf_sum(self):
+        """Residues should sum to 1 at each site."""
+        _, R = self.__gf_spectral_data()
+        sum = np.array([R[:, 0, 0].sum(), R[:, 1, 1].sum()])
+        return sum

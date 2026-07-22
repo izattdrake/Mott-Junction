@@ -76,8 +76,8 @@ def get_L(evals_rotor, evecs_rotor, beta, l_max):
     l_vals = np.arange(-l_max, l_max + 1)
     l_expect_per_state = np.sum((np.abs(evecs_rotor)**2) * l_vals[:,np.newaxis], axis=0)
 
-    bz_weights = helpers._bz_weights(evals_rotor, beta)
-    L = np.dot(bz_weights, l_expect_per_state)
+    bz = helpers._bz_weights(evals_rotor, beta)
+    L = np.dot(bz, l_expect_per_state)
     return L
 
 def get_L_vec(evals_rotor_vec, evecs_rotor_vec, beta, l_max):
@@ -108,7 +108,6 @@ def get_K_vec(t_mat, Z_vec, evals_spinon, evecs_spinon, beta, N_at=2):
     rho = evecs_spinon.conj() @ evecs_weighted.T
 
     K_vec = np.real(-2 * N_at * np.sum(t_mat * sqrt_Z[np.newaxis,:] * rho, axis=1))
-    
     return K_vec
 
 # ====================================================================
