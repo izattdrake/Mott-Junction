@@ -28,19 +28,19 @@ from Utility import helpers
 # ====================================================================
 a_ann = np.array([[0., 1.], [0., 0.]])     # annihilation on one mode
 pauli_z = np.diag([1., -1.])               # (-1)^n string factor
-id = np.eye(2)                             # Identity operator
+I = np.eye(2)                             # Identity operator
 
-def kronecker_matrix(*mats):
+def kron_matrix(*mats):
     out = mats[0]
     for mat in mats[1:]:
         out = np.kron(out, mat)
     return out
 
 # c[mode], mode = 0:1up 1:1dn 2:2up 3:2dn
-c_ann = [kronecker_matrix(a_ann, id, id, id),
-         kronecker_matrix(pauli_z, a_ann, id, id),
-         kronecker_matrix(pauli_z, pauli_z, a_ann, id),
-         kronecker_matrix(pauli_z, pauli_z, pauli_z, a_ann)]
+c_ann = [kron_matrix(a_ann, I, I, I),
+         kron_matrix(pauli_z, a_ann, I, I),
+         kron_matrix(pauli_z, pauli_z, a_ann, I),
+         kron_matrix(pauli_z, pauli_z, pauli_z, a_ann)]
 
 c_cre = [mat.T for mat in c_ann]
 
@@ -69,7 +69,7 @@ def mode(site, spin):
 #   mu = U/2
 # ====================================================================
 class Exact_Dimer:
-    def __init__(self, epsilon, t, U, mu):
+    def __init__(self, epsilon, U, t, mu):
         self.eps_vec = np.array([-epsilon, epsilon])
         self.t, self.U, self.mu = t, U, mu
 
@@ -85,7 +85,7 @@ class Exact_Dimer:
 
         self.evals, self.evecs = np.linalg.eigh(H)
 
-    def get_gf(self, i, j, z, beta=None, spin=0):
+    def get_gf(self, z, i=0, j=0, spin=0, beta=None):
         """Calculate Green's functions with the spectral representation | z can be Matsubara or retarded"""
         z = np.atleast_1d(np.asarray(z, dtype=complex))
 
@@ -110,7 +110,18 @@ class Exact_Dimer:
                 gf_mat[:, i, j] = self.get_gf(i, j, z, beta)
 
         return gf_mat
+    
+    def get_spectral_vec(self, freqs, imag_delta=1e-4, beta=None):
+        """Calculate site-resolved spectral function output from retarded Green's function"""
+        freqs = np.real(freqs)
+        spectral_vec = np.zeros((len(freqs),2))
 
+        for site in range(2):
+            spectral_vals = -np.imag(self.get_gf(freqs + 1j*imag_delta, i=site, j=site, beta=beta)) / np.pi
+            spectral_vec[:,site] = spectral_vals
+
+        return spectral_vec
+    
     def get_self_energy_matrix(self, z, beta=None):
         """Calculate self-energy from Dyson's equation"""
         z = np.atleast_1d(np.asarray(z, dtype=complex))
@@ -121,11 +132,17 @@ class Exact_Dimer:
         self_energy_mat = np.linalg.inv(gf_bare) - np.linalg.inv(self.get_gf_mat(z, beta))
         return self_energy_mat
 
-    def get_qp_weight(self, site=0, beta=None, domega=1e-4, delta=1e-4):
+    def get_qp_vec(self, beta=None, domega=1e-4, imag_delta=1e-4):
         """Calculate QP weight from retarded GF | Uses finite difference method"""
-        self_energy = self.get_self_energy_matrix(np.array([-domega + 1j*delta, domega + 1j*delta]), beta)[:, site, site]
-        Z = 1.0 / (1.0 - (self_energy[1].real - self_energy[0].real) / (2 * domega))
-        return Z
+        Z_vec = np.zeros(2)
+        z = np.array([-domega + 1j*imag_delta, domega + 1j*imag_delta])
+
+        for site in range(2):
+            self_energy = self.get_self_energy_matrix(z, beta)[:, site, site]
+            Z = 1.0 / (1.0 - (self_energy[1].real - self_energy[0].real) / (2 * domega))
+            Z_vec[site] = Z
+
+        return Z_vec
 
     def qp_weight_matsubara(self, beta, site=0):
         """Calculates quasiparticle weight with Matsubara self-energy.
@@ -148,7 +165,10 @@ class Exact_Dimer:
                 n[site] += bz_weights @ np.einsum('am,ab,bm->m', self.evecs, nop, self.evecs)
         return n
     
-    def get_E_gs(self):
+    def get_E_gs(self, grand_canonical=False):
         """Return GS energy w/o grand-canonical chemical potential shift"""
-        E_gs = self.evals[0] + self.U
+        E_gs = self.evals[0]
+        if not grand_canonical:
+            E_gs += self.U
+            
         return E_gs
