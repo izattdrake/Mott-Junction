@@ -62,16 +62,101 @@ class Decoupled_Dimer:
     # ====================================================================
     #   PRIVATE METHODS
     # ====================================================================
-    def __E0(self):
-        """Calculate MF zero-point energy"""
-        E0 = -np.sum(self.K_vec * np.sqrt(self.Z_vec))
-        return E0
-    
     def __shift_op(self):
         """Shift operator e^{i theta_j} in the |l> basis"""
         shift_op = np.zeros((self.dim, self.dim))
         shift_op[np.arange(1, self.dim), np.arange(0, self.dim - 1)] = 1.0
         return shift_op
+
+    def __jw_ops(self):
+        """Jordan-Wigner electron operators on the 16-dim Fock space.
+        Mode ordering: 0:1up 1:1down 2:2up 3:2down."""
+        if hasattr(self, '_jw_cache'):
+            return self._jw_cache
+        
+        a_ann = np.array([[0., 1.], [0., 0.]])
+        pauli_z = np.diag([1., -1.])
+        I = np.eye(2)
+
+        def kron_matrix(*mats):
+            out = mats[0]
+            for mat in mats[1:]:
+                out = np.kron(out, mat)
+            return out
+        
+        c_ann = [kron_matrix(a_ann, I, I, I), 
+                kron_matrix(pauli_z, a_ann, I, I),
+                kron_matrix(pauli_z, pauli_z, a_ann, I), 
+                kron_matrix(pauli_z, pauli_z, pauli_z, a_ann)]
+        
+        self._jw_cache = (c_ann, [mat.T for mat in c_ann])
+
+        return self._jw_cache
+ 
+    def __H_exact(self):
+        """Exact Hubbard H (bare), number operator N, and the
+        eigenspace solutions of K = H - mu_phys*N"""
+        if hasattr(self, '_H_exact_cache'):
+            return self._H_exact_cache
+        
+        mode = lambda site, spin: 2 * site + spin
+        c_ann, c_cre = self.__jw_ops()
+
+        H, N_op = np.zeros((16, 16)), np.zeros((16, 16))
+
+        for site in range(2):
+            n_up = c_cre[mode(site, 0)] @ c_ann[mode(site, 0)] # number op. c^+_1 c_1
+            n_down = c_cre[mode(site, 1)] @ c_ann[mode(site, 1)]
+            
+            H += self.epsilon_vec[site] * (n_up + n_down) + self.U * (n_up @ n_down)
+            N_op += n_up + n_down
+
+        for spin in range(2):
+            tun = c_cre[mode(0, spin)] @ c_ann[mode(1, spin)] # tunneling op. c^+_1 c_2
+            H += -self.t_mat[0, 1] * (tun + tun.T)
+
+        evals_K, evecs_K = np.linalg.eigh(H - self.mu_phys * N_op)
+        self._H_exact_cache = (H, N_op, evals_K, evecs_K)
+
+        return self._H_exact_cache
+ 
+    def __gs_proj(self):
+        """Projected MF ground state as a normalized 16-dim Fock vector"""
+        if hasattr(self, '_proj_cache'):
+            return self._proj_cache
+        
+        mode = lambda site, spin: 2 * site + spin
+        _, cdag = self.__jw_ops()
+
+        # Projected state in the full 16-dim Fock space
+        proj_state = np.zeros(16)
+
+        # Spinon sector
+        psi_f = np.zeros(16); psi_f[0] = 1.0  # 16-dim Slater det. spinon state; initial |vac>
+        evec_spinon_gs = self.evecs_spinon[:, 0]
+        for spin in range(2):
+            psi_f = (evec_spinon_gs[0] * cdag[mode(0, spin)] + evec_spinon_gs[1] * cdag[mode(1, spin)]) @ psi_f
+        
+        # Rotor sector
+        evec_rotor_gs_1 = self.evecs_rotor_vec[0][:,0]
+        evec_rotor_gs_2 = self.evecs_rotor_vec[1][:,0]
+        for i in range(16):
+            if np.abs(psi_f[i]) < 1e-15:
+                continue
+
+            # Quick bitshift method to recover occupation numbers from computational index 
+            n1 = ((i >> 3) & 1) + ((i >> 2) & 1) # n1up -> 3 bits, n1down -> 2 bits
+            n2 = ((i >> 1) & 1) + (i & 1)        # n2up -> 1 bits, n2down -> 0 bits
+            
+            proj_state[i] = psi_f[i] * evec_rotor_gs_1[n1 - 1 + self.l_max] * evec_rotor_gs_2[n2 - 1 + self.l_max]
+        
+        self._proj_cache = proj_state / np.sqrt(float(proj_state @ proj_state))
+        return self._proj_cache
+
+    def __E0(self):
+        """Calculate MF zero-point energy | E_0 = -\sum_j K_j sqrt(Z_j)"""
+        E0 = -np.sum(self.K_vec * np.sqrt(self.Z_vec))
+        return E0
     
     def __rotor_product(self):
         """Built the rotor product state from two sites |psi_1>|psi_2> with
@@ -134,6 +219,21 @@ class Decoupled_Dimer:
         E_gs = 2*E_gs_spinon + np.sum(E_gs_rotor_vec) + E0
         return E_gs
     
+    def get_E_gs_proj(self, grand_canonical=False):
+        """Calculate ground-state energy as the expected value of
+        the MF ground state projected onto the physical subspace.
+        Effectively a trial wavefunction using the variational 
+        principle."""
+        H, N_op, _, _ = self.__H_exact()
+        proj_state = self.__gs_proj()
+
+        E_proj = float(proj_state @ H @ proj_state)
+        if grand_canonical:
+            E_proj -= self.mu_phys * float(proj_state @ N_op @ proj_state)
+            # E_proj -= self._mu_phys * self._N_target
+
+        return E_proj
+
     def get_occupation_vec(self):
         """Get spinon/electron occupation at each lattice site."""
         return self.nf_vec
