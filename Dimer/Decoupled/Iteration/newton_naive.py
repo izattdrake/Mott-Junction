@@ -35,13 +35,13 @@ from ..core import (
 
 def iterate_newton_naive(epsilon_vec, t_mat, U, t_eff_mat_guess, h_vec_guess, Z_vec_guess, K_vec_guess, beta, l_max, N_target=2, N_at=2):
     """Calculate self-consistnet parameters w/ Newton's method w/o gauge fix"""
-    MAX_ITER = 1000
+    MAX_ITER = 1e6
 
-    ALPHA_H = 0.1
-    ALPHA_Z = 0.1
-    ALPHA_K = 0.1
-    ALPHA_T_EFF = 0.1
-    ALPHA_MU = 0.1
+    ALPHA_H = 1e-1
+    ALPHA_Z = 1e-1
+    ALPHA_K = 1e-1
+    ALPHA_T_EFF = 1e-1
+    ALPHA_MU = 1e-1
 
     TOL_H = 1e-10
     TOL_T_EFF = 1e-10

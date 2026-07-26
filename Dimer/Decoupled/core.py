@@ -99,7 +99,7 @@ def get_Z_vec(evals_rotor_vec, evecs_rotor_vec, beta):
 
     return Z_vec
 
-def get_K_vec(t_mat, Z_vec, evals_spinon, evecs_spinon, beta, N_at=2):
+def get_K_vec(t_mat, Z_vec, evals_spinon, evecs_spinon, beta, Q=2):
     """Calculate K values at every site"""
     fd = np.array([helpers._fermi(energy, beta) for energy in evals_spinon])
     evecs_weighted = evecs_spinon * fd[np.newaxis,:]
@@ -107,7 +107,7 @@ def get_K_vec(t_mat, Z_vec, evals_spinon, evecs_spinon, beta, N_at=2):
     sqrt_Z = np.sqrt(Z_vec)
     rho = evecs_spinon.conj() @ evecs_weighted.T
 
-    K_vec = np.real(-2 * N_at * np.sum(t_mat * sqrt_Z[np.newaxis,:] * rho, axis=1))
+    K_vec = np.real(-2 * Q * np.sum(t_mat * sqrt_Z[np.newaxis,:] * rho, axis=1))
     return K_vec
 
 # ====================================================================

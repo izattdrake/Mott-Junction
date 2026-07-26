@@ -56,12 +56,12 @@ def modified_broyden_step(f_vec, h_vec, alpha, weight, dF_hist, u_hist, h_prev, 
  
 def iterate_broyden(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_guess, beta, l_max, N_target=2.0):
     """Calculate self-consistent parameters w/ modified Broyden's method"""
-    MAX_ITER = 50000
+    MAX_ITER = 1e6
  
-    ALPHA_H = 0.1
-    ALPHA_T_EFF = 0.1
-    ALPHA_J_EFF = 0.1
-    ALPHA_MU = 0.1
+    ALPHA_H = 1e-1
+    ALPHA_T_EFF = 1e-1
+    ALPHA_J_EFF = 1e-1
+    ALPHA_MU = 1e-1
   
     TOL_H = 1e-8
     TOL_T_EFF = 1e-8

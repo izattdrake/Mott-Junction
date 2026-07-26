@@ -5,11 +5,14 @@ from pathlib import Path
 from .Iteration.newton_gauge import iterate_newton_gauge
 from .Iteration.broyden import iterate_broyden
 
+from .core import get_H_spinon, get_H_rotor
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from Utility import helpers
+from Utility.iteration_cache import IterationCache
 
 # ====================================================================
-#   COUPLED DIMER CLASS INSTANCE FOR CALCULATING OBSERVABLES
+#   COUPLED DIMER CLASS 
 # --------------------------------------------------------------------
 #   A mean-field approximation is made on the exact slave rotor
 #   Hubbard Hamiltoniain, giving a spinon and rotor Hamiltonian.
@@ -27,43 +30,121 @@ from Utility import helpers
 #   creates a class instance for a set of parameters specifying
 #   doping, Hubbard repulsion, temperature, and the rotor Hilbert 
 #   space cutoff, then uses class methods here to get desired 
-#   quantities like the Green's function, self-energy, quasiparticle
+#   quantities like the Green"s function, self-energy, quasiparticle
 #   weight, pair occupancy, heat capacity, etc.  
 # --------------------------------------------------------------------
 #   Methods used to solve the self-consistency condition can be found
 #   in Dimer/Coupled/core.py. 
 # ====================================================================
 
-class Coupled_Dimer:
-    def __init__(self, epsilon, U, t, beta, l_max, N_target=2, ITERATION=0):
-        self._epsilon_vec = np.array([-epsilon/2.0, epsilon/2.0]) # Even/opposite doping to preserve PHS, restricts chem. pot.
-        self._U, self._t, self._beta, self._l_max, self._N_target = U, t, beta, l_max, N_target
+class CoupledDimer:
+    _CACHE_VERSION = 1.0
+    _CACHE_DIR = Path(__file__).resolve().parent / "_cache"
+ 
+    """Names of the converged quantities in iteration methods" return order.
+    Parameter guesses looked for in nearest parameter lookup, needed for calling fresh iteration"""
+    _ITERATION_NAMES = ("h_vec", "t_eff", "J_eff", "nf_vec", "L_vec", "mu", "count")
+    _NEAREST_NAMES = ("h_vec", "t_eff", "J_eff")
+
+    def __init__(self, epsilon, U, t, beta, l_max, N_target=2, iteration_method=0,
+                 use_cache=True, cache_dir=None, try_nearest_params=True, nearest_params_max_dist=0.3, 
+                 print_cache_results=False):
+        """Takes parameter data and calculates self-consistent parameters and SR eigenspace solutions.
+        Checks parameters against stored cache data; if cached, retrieves data. if not cached,
+        calls an iteration method to find solutions. Eigenspace solutions are calcualted from
+        retrieved parameters to save space."""
+        self._epsilon_vec = np.array([-epsilon/2.0, epsilon/2.0])
+        self._U, self._t, self._beta, self._l_max, self._N_target = float(U), float(t), beta, int(l_max), int(N_target)
+        self._dim = 2*l_max + 1
+ 
+        cache = IterationCache(cache_dir if cache_dir is not None else self._CACHE_DIR,
+                               model_tag="coupled_dimer", version=self._CACHE_VERSION)
+        params = dict(epsilon=epsilon, U=U, t=t, beta=beta, lmax=l_max, N=N_target)
+        data = cache.load(params, self._ITERATION_NAMES) if use_cache else None
         
-        self._dim = 2*l_max + 1 # Dimension for one site; rotor Hilbert space is dim**2
+        if data is not None:
+            # Successful hit w/ stored data, load into memory
+            self._cache_status = "HIT"
 
-        t_eff_guess = 0.8 * t
-        J_eff_guess = 0.5 * t
-        h_vec_guess = -self._epsilon_vec
+            self._h_vec        = np.asarray(data["h_vec"], float).copy()
+            self._nf_vec       = np.asarray(data["nf_vec"], float).copy()
+            self._L_vec        = np.asarray(data["L_vec"], float).copy()
 
-        if ITERATION == 0: # Iteration w/ Newton's method & gauge fix
-            (self._evals_spinon, self._evecs_spinon, self._evals_rotor, 
-             self._evecs_rotor, self._h_vec, self._t_eff, self._J_eff, 
-             self._nf_vec, self._L_vec, self._mu, self._count) = iterate_newton_gauge(self._epsilon_vec, self._U, self._t, h_vec_guess, t_eff_guess, 
-                                                                                      J_eff_guess, self._beta, self._l_max, self._N_target)
-                                                                                                                                                                                              
-        elif ITERATION == 1: # Iteration w/ modified Broyden's method
-            (self._evals_spinon, self._evecs_spinon, self._evals_rotor, 
-            self._evecs_rotor, self._h_vec, self._t_eff, self._J_eff,
-            self._nf_vec, self._L_vec, self._mu, self._count) = iterate_broyden(self._epsilon_vec, self._U, self._t, h_vec_guess, t_eff_guess, 
-                                                                                J_eff_guess, self._beta, self._l_max, self._N_target)
+            self._t_eff        = float(data["t_eff"])
+            self._J_eff        = float(data["J_eff"])
+            self._mu           = float(data["mu"])
+            self._count        = int(data["count"])
+
+            # Rebuild and solve for eigenspace solutions of spinon & rotor Hamiltonians; saves disk space
+            self._evals_spinon, self._evecs_spinon = np.linalg.eigh(get_H_spinon(self._epsilon_vec, self._h_vec, self._t_eff, self._mu))
+            self._evals_rotor, self._evecs_rotor   = np.linalg.eigh(get_H_rotor(self._U, self._h_vec, self._J_eff, self._l_max))
+
+            if print_cache_results:
+                print(f"CoupledDimer.__init__: Cache hit: {cache.path(params).name}")
         else:
-            raise ValueError('Coupled_Dimer.__init__ | ERROR: ITERATION argument')
+            # Failure to hit; default attempt params before nearest params check
+            h_vec_guess = -self._epsilon_vec
+            t_eff_guess = 0.8 * t
+            J_eff_guess = 0.8 * t
 
+            self._cache_status = "MISS"
+
+            # Search for nearest params
+            if use_cache and try_nearest_params:
+                near = cache.nearest(params, self._NEAREST_NAMES, must_match=("N"))
+                if near is not None and near["distance"] <= nearest_params_max_dist:
+                    near_data = near["data"]
+
+                    h_vec_guess = np.asarray(near_data["h_vec"], float).copy()
+                    t_eff_guess = float(near_data["t_eff"])
+                    J_eff_guess = float(near_data["J_eff"])
+
+                    self._cache_status = "NEAREST"
+
+                    if print_cache_results:
+                        print(f"CoupledDimer.__init__: Nearest start from "
+                              f"{near['params']} (dist = {near['distance']:.3f})")
+ 
+            if iteration_method == 0:   # Newton"s method w/ gauge fix
+                (
+                    self._evals_spinon, self._evecs_spinon, self._evals_rotor,
+                    self._evecs_rotor, self._h_vec, self._t_eff, self._J_eff,
+                    self._nf_vec, self._L_vec, self._mu, self._count
+                ) = iterate_newton_gauge(
+                    self._epsilon_vec, self._U, self._t, 
+                    h_vec_guess, t_eff_guess, J_eff_guess, 
+                    self._beta, self._l_max, self._N_target
+                )
+            elif iteration_method == 1: # Modified Broyden"s method
+                (
+                    self._evals_spinon, self._evecs_spinon, self._evals_rotor,
+                    self._evecs_rotor, self._h_vec, self._t_eff, self._J_eff,
+                    self._nf_vec, self._L_vec, self._mu, self._count
+                ) = iterate_broyden(
+                    self._epsilon_vec, self._U, self._t, 
+                    h_vec_guess, t_eff_guess, J_eff_guess, 
+                    self._beta, self._l_max, self._N_target
+                )
+            else:
+                raise ValueError("Coupled_Dimer.__init__: ERROR: iteration argument")
+ 
+            if use_cache:
+                cache.save(params, {name: getattr(self, "_" + name) for name in self._ITERATION_NAMES})
+ 
         """Add U/2 shift missing from (U/2)L^2 representation of the interaction.
         Note that U/2 is only the correct shift in PHS systems, that is half-filling
         with even-and-opposite doping on either site."""
-        self._mu_phys = self._mu + self._U / 2.0 
-    
+        self._mu_phys = self._mu + self._U / 2.0
+ 
+    # ====================================================================
+    #   CLASS/STATIC METHODS (PRIMARILY CACHE RELATED)
+    # ====================================================================
+    @classmethod
+    def clear_cache(cls, cache_dir=None):
+        """Delete all cached iteration results for the coupled dimer"""
+        IterationCache(cache_dir if cache_dir is not None else cls._CACHE_DIR,
+                       model_tag="coupled_dimer", version=cls._CACHE_VERSION).clear()
+
     # ====================================================================
     #   PRIVATE METHODS
     # ====================================================================
@@ -88,7 +169,7 @@ class Coupled_Dimer:
     def __jw_ops(self):
         """Jordan-Wigner electron operators on the 16-dim Fock space.
         Mode ordering: 0:1up 1:1down 2:2up 3:2down."""
-        if hasattr(self, '_jw_cache'):
+        if hasattr(self, "_jw_cache"):
             return self._jw_cache
         
         a_ann = np.array([[0., 1.], [0., 0.]])
@@ -112,8 +193,8 @@ class Coupled_Dimer:
 
     def __H_exact(self):
         """Exact Hubbard H (bare), number operator N, and the
-        eigendecomposition of K = H - mu_phys*N | cached"""
-        if hasattr(self, '_H_exact_cache'):
+        eigenspace solutions of K = H - mu_phys*N"""
+        if hasattr(self, "_H_exact_cache"):
             return self._H_exact_cache
         
         mode = lambda site, spin: 2 * site + spin
@@ -138,35 +219,34 @@ class Coupled_Dimer:
         return self._H_exact_cache
  
     def __gs_proj(self):
-        """Projected MF ground state as a normalized 16-dim Fock vector,
-        plus its weight <Psi|P|Psi> in the physical subspace."""
-        if hasattr(self, '_proj_cache'):
+        """Projected MF ground state as a normalized 16-dim Fock vector"""
+        if hasattr(self, "_proj_cache"):
             return self._proj_cache
         
         mode = lambda site, spin: 2 * site + spin
         _, c_cre = self.__jw_ops()
 
-        #rojected state in the full 16-dim Fock space
+        # Projected state in the full 16-dim Fock space
         proj_state = np.zeros(16)
 
         #Spinon sector
-        spinon_state = np.zeros(16); spinon_state[0] = 1.0 # 16-dim Slater det. spinon state
+        psi_f = np.zeros(16); psi_f[0] = 1.0 # 16-dim Slater det. spinon state; initial |vac>
         evec_spinon_gs = self._evecs_spinon[:,0]
         for spin in range(2):
-            spinon_state = (evec_spinon_gs[0] * c_cre[mode(0, spin)] + evec_spinon_gs[1] * c_cre[mode(1, spin)]) @ spinon_state
+            psi_f = (evec_spinon_gs[0] * c_cre[mode(0, spin)] + evec_spinon_gs[1] * c_cre[mode(1, spin)]) @ psi_f
             
         #Rotor sector
         evec_rotor_gs = self._evecs_rotor[:,0]
         for i in range(16):
-            if np.abs(spinon_state[i]) < 1e-15:
+            if np.abs(psi_f[i]) < 1e-15:
                 continue
             
-            n1 = ((i >> 3) & 1) + ((i >> 2) & 1) 
-            n2 = ((i >> 1) & 1) + (i & 1)       
+            # Quick bitshift method to recover occupation numbers from computational index 
+            n1 = ((i >> 3) & 1) + ((i >> 2) & 1) # n1up -> 3 bits, n1down -> 2 bits
+            n2 = ((i >> 1) & 1) + (i & 1)        # n2up -> 1 bits, n2down -> 0 bits
 
-            # computational index of basis elements satisfying the gauge constraint     
             phys_index = (n1 - 1 + self._l_max) * self._dim + (n2 - 1 + self._l_max) 
-            proj_state[i] = spinon_state[i] * evec_rotor_gs[phys_index]
+            proj_state[i] = psi_f[i] * evec_rotor_gs[phys_index]
 
         self._proj_cache = proj_state / np.sqrt(float(proj_state @ proj_state))
 
@@ -174,7 +254,7 @@ class Coupled_Dimer:
 
     def __E0(self):
         """Calculate zero-point energy from the MF decoupling | E0 = \sum_{ij} J^{eff}_{ij} <cos(theta_i - theta_j)>"""
-        if hasattr(self, '_E0_cache'):
+        if hasattr(self, "_E0_cache"):
             return self._E0_cache
         
         l1 = np.repeat(np.arange(-self._l_max, self._l_max+1), self._dim)
@@ -200,9 +280,9 @@ class Coupled_Dimer:
         return self._E0_cache
         
     def __gf_spectral_data(self, tol=1e-13):
-        """Calculate Green's function data. Poles P_k, residues R_k[i,j] with G_ij(z) = sum_k R_k[i,j]/(z-P_k).
+        """Calculate Green"s function data. Poles P_k, residues R_k[i,j] with G_ij(z) = sum_k R_k[i,j]/(z-P_k).
             Cached and saved on first call. Used for quickly calculating values."""
-        if hasattr(self, '_gf_cache'):
+        if hasattr(self, "_gf_cache"):
             return self._gf_cache
         
         # Rotor matrix elements: <m|e^{i\theta_j}|n>
@@ -215,10 +295,10 @@ class Coupled_Dimer:
         for i in range(2):
             fd_spinon_vals = helpers._fermi(self._evals_spinon[i], self._beta)
             
-            sr_mix = fd_spinon_vals * p_rotor_bra + (1.0 - fd_spinon_vals) * p_rotor_ket    # Convolution of spinon/rotor GF's
+            sr_mix = fd_spinon_vals * p_rotor_bra + (1.0 - fd_spinon_vals) * p_rotor_ket    # Convolution of spinon/rotor GF"s
             spinon_coeff = self._evecs_spinon[:,i]                                           # spinon state coefficients
 
-            R = np.einsum('i,j,inm,jnm,nm->nmij', spinon_coeff, spinon_coeff, mel_rotor, mel_rotor, sr_mix)
+            R = np.einsum("i,j,inm,jnm,nm->nmij", spinon_coeff, spinon_coeff, mel_rotor, mel_rotor, sr_mix)
             
             pole_vec.append(self._evals_spinon[i] + dE_rotor.ravel())
             res_vec.append(R.reshape(-1, 2, 2))
@@ -246,13 +326,14 @@ class Coupled_Dimer:
         """Calculate ground-state energy as the expected value of
         the MF ground state projected onto the physical subspace.
         Effectively a trial wavefunction using the variational 
-        principle, guarenteed."""
+        principle."""
         H, N_op, _, _ = self.__H_exact()
         proj_state = self.__gs_proj()
 
         E_proj = float(proj_state @ H @ proj_state)
         if grand_canonical:
             E_proj -= self._mu_phys * float(proj_state @ N_op @ proj_state)
+            # E_proj -= self._mu_phys * self._N_target
 
         return E_proj
 
@@ -261,7 +342,7 @@ class Coupled_Dimer:
         return self._nf_vec
     
     def get_gf(self, z, i=0, j=0):
-        """Calculate Green's function G_ij(z) on complex frequencies z (Matsubara or retarded okay) |
+        """Calculate Green"s function G_ij(z) on complex frequencies z (Matsubara or retarded okay) |
            Can pass scalar or vector values of z. Returns shape (len(z))"""
         z = np.atleast_1d(np.asarray(z, dtype=complex)) # If z is a scalar, make array
         P, R = self.__gf_spectral_data() # Pull residue and pole cache data
@@ -269,7 +350,7 @@ class Coupled_Dimer:
         return gf_vals
     
     def get_gf_matrix(self, z):
-        """Calculate the full 2x2 Green's function matrix at scalar or vector values of z | returns shape (len(z), 2, 2)"""
+        """Calculate the full 2x2 Green"s function matrix at scalar or vector values of z | returns shape (len(z), 2, 2)"""
         z = np.atleast_1d(np.asarray(z, dtype=complex)) # If z is a scalar, make array
         P, R = self.__gf_spectral_data() # Pull poles and residues
         gf_mat = np.sum(R[None, :, :, :]
@@ -289,18 +370,18 @@ class Coupled_Dimer:
         return self_energy_mat
     
     def get_spectral_vec(self, freqs, imag_delta=1e-4):
-        """Calculate site-resolved spectral function output from retarded Green's function"""
+        """Calculate site-resolved spectral function output from retarded Green"s function"""
         freqs = np.real(freqs)
         spectral_vec = np.zeros((len(freqs),2))
 
         for site in range(2):
             spectral_vals = -np.imag(self.get_gf(freqs + 1j * imag_delta, site, site)) / np.pi
             spectral_vec[:,site] = spectral_vals
-            
+
         return spectral_vec
     
     def get_qp_vec(self, domega=1e-5, delta=1e-4):
-        """Calculate quasiparticle weight Z as a finite difference of the retarded Green's function"""
+        """Calculate quasiparticle weight Z as a finite difference of the retarded Green"s function"""
         Z_vec = np.zeros(2)
         z = np.array([-domega + 1j*delta, domega + 1j*delta])
 

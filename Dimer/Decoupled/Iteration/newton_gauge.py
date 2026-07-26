@@ -73,11 +73,11 @@ def iterate_newton_gauge(epsilon_vec, t_mat, U, t_eff_mat_guess, h_vec_guess, Z_
     """Calculate self-consistent parameters w/ Newton's method & gauge fix"""
     MAX_ITER = 1000000
 
-    ALPHA_H = 1e-3
-    ALPHA_Z = 1e-3
-    ALPHA_K = 1e-3
-    ALPHA_T_EFF = 1e-3
-    ALPHA_MU = 1e-3
+    ALPHA_H = 1e-1
+    ALPHA_Z = 1e-1
+    ALPHA_K = 1e-1
+    ALPHA_T_EFF = 1e-1
+    ALPHA_MU = 1e-1
 
     TOL_H = 1e-10
     TOL_T_EFF = 1e-10
