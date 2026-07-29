@@ -67,12 +67,12 @@ def iterate_broyden(epsilon_vec, t_mat, U, t_eff_mat_guess, h_vec_guess, Z_vec_g
     ALPHA_T_EFF = 1e-1
     ALPHA_MU = 1e-1
 
-    TOL_H = 1e-10
-    TOL_T_EFF = 1e-10
-    TOL_Z = 1e-10
-    TOL_K = 1e-10
-    TOL_N = 1e-8
-    TOL_F = 1e-10
+    TOL_H = 1e-9
+    TOL_T_EFF = 1e-9
+    TOL_Z = 1e-9
+    TOL_K = 1e-9
+    TOL_N = 1e-6
+    TOL_F = 1e-9
 
     WEIGHT = 1e-2
     MEMORY = 8

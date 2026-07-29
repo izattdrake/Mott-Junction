@@ -1,11 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from Coupled.Coupled_Dimer import CoupledDimer
-from Decoupled.Decoupled_Dimer import DecoupledDimer
-from Exact.Exact_Dimer import ExactDimer
+from Exact.exact_dimer import ExactDimer
+from Coupled.coupled_dimer import CoupledDimer
+from Decoupled.decoupled_dimer import DecoupledDimer
     
-def analytc_spectral(freqs, U, t, eta=1e-2):
+def spectral_by_hand(freqs, U, t, eta=1e-2):
     None
     
 if __name__ == '__main__':

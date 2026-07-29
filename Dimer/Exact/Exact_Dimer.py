@@ -75,11 +75,12 @@ class ExactDimer:
 
         H = np.zeros((16, 16))
 
-        for site in (0, 1):
+        for site in range(2):
             n_up = c_cre[mode(site, 0)] @ c_ann[mode(site, 0)]
             n_down = c_cre[mode(site, 1)] @ c_ann[mode(site, 1)]
             H += (self.eps_vec[site] - mu) * (n_up + n_down) + U * n_up @ n_down
-        for spin in (0, 1):
+
+        for spin in range(2):
             tun = c_cre[mode(0, spin)] @ c_ann[mode(1, spin)] # tunneling operators
             H += -t * (tun + tun.T)
 
@@ -107,7 +108,7 @@ class ExactDimer:
 
         for i in (0, 1):
             for j in (0, 1):
-                gf_mat[:, i, j] = self.get_gf(i, j, z, beta)
+                gf_mat[:, i, j] = self.get_gf(z, i, j, beta=beta)
 
         return gf_mat
     

@@ -1,32 +1,39 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from Exact.Exact_Dimer import ExactDimer
-from Coupled.Coupled_Dimer import CoupledDimer
-from Decoupled.Decoupled_Dimer import DecoupledDimer
+from Exact.exact_dimer import ExactDimer
+from Coupled.coupled_dimer import CoupledDimer
+from Decoupled.decoupled_dimer import DecoupledDimer
+
+def Z_by_hand(U, t):
+    Z = 1/(1 + (U/(6*t))**2)
+    return Z
 
 if __name__ == '__main__':
-    epsilon, t, beta, l_max = 0.0, 1.0, 50.0, 15
-    U_vals = np.linspace(0.0, 4.0, 20)
+    epsilon, t, beta, l_max = 0.0, 1.0, None, 15
 
-    Z_output = {
-        'coupled': [],
-        'decoupled': []
-    }
+    U_vals = np.linspace(0.02, 4.0, 20)
+    exact_Z, c_Z, dc_Z = [], [], []
+    count = 1
 
     for U in U_vals:
-        coupled_dimer = CoupledDimer(epsilon, U, t, beta, l_max)
-        decoupled_dimer = DecoupledDimer(epsilon, U, t, beta, l_max)
+        exact_dimer = ExactDimer(epsilon, U, t, mu=U/2) 
+        c_dimer = CoupledDimer(epsilon, U, t, l_max, print_cache_results=True)
+        dc_dimer = DecoupledDimer(epsilon, U, t, l_max, print_cache_results=True)
 
-        Z_output['coupled'].append(coupled_dimer.get_exp_shift_vec()[0])
-        Z_output['decoupled'].append(decoupled_dimer.get_Z_vec()[0])
-        
+        exact_Z.append(exact_dimer.get_qp_vec()[0])
+        c_Z.append(c_dimer.get_qp_vec()[0])
+        dc_Z.append(dc_dimer.get_Z_vec()[0])
+
+        print(count); count += 1
+
     plt.figure(figsize=(6, 4))
-    plt.plot(U_vals, Z_output['coupled'], 'o-', lw=1.5, ms=4, color='b', label='Coupled')
-    plt.plot(U_vals, Z_output['decoupled'], '^-', lw=1.5, ms=4, color='r', label='Decoupled')
+    plt.plot(U_vals, exact_Z, color='black', label='Exact')
+    plt.plot(U_vals, c_Z, color='dodgerblue', label='Coupled')
+    plt.plot(U_vals, dc_Z, color='tomato', label='Decoupled')
 
     plt.xlabel(r'$U$')
-    plt.ylabel(r'$\langle e^{i\theta}\rangle$')
+    plt.ylabel(r'Quasiparticle spectral weight')
     plt.title('Quasiparticle coherence')
     plt.grid(True, alpha=0.3)
     plt.ylim(bottom=0)

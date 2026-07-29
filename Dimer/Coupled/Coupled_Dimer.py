@@ -46,7 +46,7 @@ class CoupledDimer:
     _ITERATION_NAMES = ("h_vec", "t_eff", "J_eff", "nf_vec", "L_vec", "mu", "count")
     _NEAREST_NAMES = ("h_vec", "t_eff", "J_eff")
 
-    def __init__(self, epsilon, U, t, beta, l_max, N_target=2, iteration_method=0,
+    def __init__(self, epsilon, U, t, l_max, beta=None, N_target=2, iteration_method=0,
                  use_cache=True, cache_dir=None, try_nearest_params=True, nearest_params_max_dist=0.3, 
                  print_cache_results=False):
         """Takes parameter data and calculates self-consistent parameters and SR eigenspace solutions.

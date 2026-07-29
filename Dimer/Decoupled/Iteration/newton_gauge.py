@@ -79,12 +79,12 @@ def iterate_newton_gauge(epsilon_vec, t_mat, U, t_eff_mat_guess, h_vec_guess, Z_
     ALPHA_T_EFF = 1e-1
     ALPHA_MU = 1e-1
 
-    TOL_H = 1e-10
-    TOL_T_EFF = 1e-10
-    TOL_Z = 1e-10
-    TOL_K = 1e-10
-    TOL_N = 1e-8
-    TOL_PHYS_F = 1e-10
+    TOL_H = 1e-9
+    TOL_T_EFF = 1e-9
+    TOL_Z = 1e-9
+    TOL_K = 1e-9
+    TOL_N = 1e-6
+    TOL_PHYS_F = 1e-9
 
     mu = 0.0 # Global chemical potential
     dh = 1e-5 # Finite difference step

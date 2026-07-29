@@ -34,11 +34,6 @@ class IterationCache:
             return f'{value:.12g}'
         else:
             raise ValueError
-        
-    def _key(self, params):
-        """Creates key string for a set of parameters."""
-        key = '_'.join(f'{name}{self._format(val)}' for name, val in params.items())
-        return key
 
     @staticmethod
     def _is_same_value(x, y):
@@ -63,6 +58,11 @@ class IterationCache:
 
         dist = np.sqrt(dist_sq)
         return dist
+
+    def _key(self, params):
+        """Creates key string for a set of parameters."""
+        key = '_'.join(f'{name}{self._format(val)}' for name, val in params.items())
+        return key
 
     def _read_entry(self, file_path, names):
         """Read one cached file; return None if it is unreadable, written by different version,
@@ -111,13 +111,13 @@ class IterationCache:
 
         try:
             names = np.array(list(params.keys()))
-            values = np.array([np.nan if value is None else float(value)
+            vals = np.array([np.nan if value is None else float(value)
                                for value in params.values()])
             np.savez_compressed(temp_name,
                                 __version__=self.version,
                                 __key__=self._key(params),
                                 __param_names__=names,
-                                __param_values__=values,
+                                __param_values__=vals,
                                 **data)
             os.replace(temp_name, self.path(params))
         except BaseException:
@@ -134,7 +134,7 @@ class IterationCache:
  
         # Wanted parameter set, turn type(None) into type(np.nan) for reading/writing
         wanted_params = {name: (np.nan if value is None else float(value)) for name, value in params.items()}
-        best_distance, best_entry = np.inf, None
+        best_dist, best_entry = np.inf, None
 
         for file_path in self.cache_dir.glob(f'{self.model_tag}_*.npz'):
             entry = self._read_entry(file_path, names)
@@ -152,15 +152,15 @@ class IterationCache:
             if not all(self._is_same_value(candidate_params[name], wanted_params[name]) for name in must_match):
                 continue
  
-            distance = self._distance(wanted_params, candidate_params)
-            if distance < best_distance:
-                best_distance = distance
-                best_entry = {'params': candidate_params, 'data': candidate_data, 'distance': float(distance)}
+            dist = self._distance(wanted_params, candidate_params)
+            if dist < best_dist:
+                best_dist = dist
+                best_entry = {'params': candidate_params, 'data': candidate_data, 'distance': float(dist)}
                         
         return best_entry
 
     def clear(self):
         """Delete every cache entry belonging to this model tag"""
         if self.cache_dir.exists():
-            for file_path in self.cache_dir.glob('%s_*.npz' % self.model_tag):
+            for file_path in self.cache_dir.glob(f"{self.model_tag}_*.npz"):
                 file_path.unlink()

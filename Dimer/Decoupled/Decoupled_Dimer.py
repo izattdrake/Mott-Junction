@@ -41,7 +41,7 @@ class DecoupledDimer:
     _ITERATION_NAMES = ("h_vec", "Z_vec", "K_vec", "t_eff_mat", "nf_vec", "L_vec", "mu", "count")
     _NEAREST_NAMES = ("h_vec", "Z_vec", "K_vec", "t_eff_mat")
 
-    def __init__(self, epsilon, U, t, beta, l_max, N=2, Q=2, iteration_method=0,
+    def __init__(self, epsilon, U, t, l_max, beta=None, N=2, Q=2, iteration_method=0,
                  use_cache=True, cache_dir=None, try_nearest_params=True, nearest_params_max_dist=0.3,
                  print_cache_results=False):
         """Takes parameter data and calculates self-consistent parameters and SR eigenspace solutions.
@@ -394,6 +394,9 @@ class DecoupledDimer:
 
         return Z_vec
  
+    def get_Z_vec(self):
+        return self._Z_vec
+    
     def check_gf_sum(self):
         """Residues should sum to 1 at each site."""
         _, R = self.__gf_spectral_data()
