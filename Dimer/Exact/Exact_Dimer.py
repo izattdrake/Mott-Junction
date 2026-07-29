@@ -68,7 +68,7 @@ def mode(site, spin):
 #   symbolic, for easy computation. 
 #   mu = U/2
 # ====================================================================
-class Exact_Dimer:
+class ExactDimer:
     def __init__(self, epsilon, U, t, mu):
         self.eps_vec = np.array([-epsilon, epsilon])
         self.t, self.U, self.mu = t, U, mu

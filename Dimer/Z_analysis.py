@@ -1,9 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from Exact.Exact_Dimer import Exact_Dimer
-from Coupled.Coupled_Dimer import Coupled_Dimer
-from Decoupled.Decoupled_Dimer import Decoupled_Dimer
+from Exact.Exact_Dimer import ExactDimer
+from Coupled.Coupled_Dimer import CoupledDimer
+from Decoupled.Decoupled_Dimer import DecoupledDimer
 
 if __name__ == '__main__':
     epsilon, t, beta, l_max = 0.0, 1.0, 50.0, 15
@@ -15,10 +15,10 @@ if __name__ == '__main__':
     }
 
     for U in U_vals:
-        coupled_dimer = Coupled_Dimer(epsilon, U, t, beta, l_max)
-        decoupled_dimer = Decoupled_Dimer(epsilon, U, t, beta, l_max)
+        coupled_dimer = CoupledDimer(epsilon, U, t, beta, l_max)
+        decoupled_dimer = DecoupledDimer(epsilon, U, t, beta, l_max)
 
-        Z_output['coupled'].append(coupled_dimer.get_Z_vec()[0])
+        Z_output['coupled'].append(coupled_dimer.get_exp_shift_vec()[0])
         Z_output['decoupled'].append(decoupled_dimer.get_Z_vec()[0])
         
     plt.figure(figsize=(6, 4))
