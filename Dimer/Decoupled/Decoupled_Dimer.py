@@ -4,11 +4,12 @@ import sys
 from pathlib import Path
 from .Iteration.broyden import iterate_broyden
 from .Iteration.newton_gauge import iterate_newton_gauge
+from .Iteration.newton_naive import iterate_newton_naive
 
 from .core import get_H_spinon, get_rotor_eig_vec
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from Utility import helpers
+from Utility.helpers import Helpers
 from Utility.iteration_cache import IterationCache
 
 # ====================================================================
@@ -35,30 +36,35 @@ from Utility.iteration_cache import IterationCache
 class DecoupledDimer:
     _CACHE_VERSION = 1.0
     _CACHE_DIR = Path(__file__).resolve().parent / '_cache'
+    _MODEL_TAG = "decoupled_dimer"
 
     """Names of the converged quantities in iteration methods" return order.
     Parameter guesses looked for in nearest parameter lookup, needed for calling fresh iteration"""
     _ITERATION_NAMES = ("h_vec", "Z_vec", "K_vec", "t_eff_mat", "nf_vec", "L_vec", "mu", "count")
     _NEAREST_NAMES = ("h_vec", "Z_vec", "K_vec", "t_eff_mat")
 
-    def __init__(self, epsilon, U, t, l_max, beta=None, N=2, Q=2, iteration_method=0,
+    def __init__(self, epsilon, U, t, l_max, beta=None, N_target=2, N_at=2, iteration_method=0,
                  use_cache=True, cache_dir=None, try_nearest_params=True, nearest_params_max_dist=0.3,
                  print_cache_results=False):
         """Takes parameter data and calculates self-consistent parameters and SR eigenspace solutions.
         Checks parameters against stored cache data; if cached, retrieves data. if not cached,
         calls an iteration method to find solutions. Eigenspace solutions are calculted from
-        retrieved parameters to save space."""
+        retrieved parameters to save space.
+        
+        N: # of electrons
+        N_at: # of states on a site
+        """
         self._epsilon_vec = np.array([-epsilon/2.0, epsilon/2.0]) # Even/opposite doping to preserve PHS, restricts chem. potential to U/2
         self._t_mat = np.array([
             [0, t], 
             [t, 0]
         ])
-        self._U, self._beta, self._l_max, self._N_target, self.Q = U, beta, l_max, N, Q
+        self._U, self._beta, self._l_max, self._N, self._N_at = U, beta, l_max, N_target, N_at
         self._dim = 2 * l_max + 1 # Dimension for one site
 
         cache = IterationCache(cache_dir if cache_dir is not None else self._CACHE_DIR,
-                               model_tag="decoupled_dimer", version=self._CACHE_VERSION)
-        params = dict(epsilon=epsilon, U=U, t=t, beta=beta, lmax=l_max, N=N, Q=Q)
+                               model_tag=self._MODEL_TAG, version=self._CACHE_VERSION)
+        params = dict(epsilon=epsilon, U=U, t=t, beta=beta, lmax=l_max, N=N_target, Q=N_at)
         data = cache.load(params, self._ITERATION_NAMES) if use_cache else None
         
         if data is not None:
@@ -110,29 +116,40 @@ class DecoupledDimer:
                         print(f"DecoupledDimer.__init__: Nearest start from "
                               f"{near['params']} (dist = {near['distance']:.3f})")
  
-            if iteration_method == 0: # Iteration w/ Newton's method & gauge fix
+            if iteration_method == 0: # Iteration w/ modified Broyden's method 
                 (
                     self._evals_spinon, self._evecs_spinon, self._evals_rotor_vec, 
                     self._evecs_rotor_vec, self._h_vec, self._Z_vec, self._K_vec, 
                     self._t_eff_mat, self._nf_vec, self._L_vec, self._mu, self._count
-                ) = iterate_newton_gauge(
+                ) = iterate_broyden(
                     self._epsilon_vec, self._t_mat, self._U, t_eff_mat_guess, 
                     h_vec_guess, Z_vec_guess, K_vec_guess, self._beta, self._l_max, 
-                    self._N_target, self.Q
+                    self._N, self._N_at
                 )
-            elif iteration_method == 1: # Iteration w/ modified Broyden's method
+            elif iteration_method == 1: # Iteration w/ Newton's method w/ gauge fix
                 (
                     self._evals_spinon, self._evecs_spinon, self._evals_rotor_vec,
                     self._evecs_rotor_vec, self._h_vec, 
                     self._Z_vec, self._K_vec, self._t_eff_mat, self._nf_vec, self._L_vec, 
                     self._mu, self._count
-                ) = iterate_broyden(
+                ) = iterate_newton_gauge(
                     self._epsilon_vec, self._t_mat, self._U, t_eff_mat_guess, 
                     h_vec_guess, Z_vec_guess, K_vec_guess, self._beta, self._l_max, 
-                    self._N_target, self.Q
+                    self._N, self._N_at
+                )
+            elif iteration_method == 2: # Iteration w/ Newton's method w/o gauge fix
+                (
+                    self._evals_spinon, self._evecs_spinon, self._evals_rotor_vec,
+                    self._evecs_rotor_vec, self._h_vec, 
+                    self._Z_vec, self._K_vec, self._t_eff_mat, self._nf_vec, self._L_vec, 
+                    self._mu, self._count
+                ) = iterate_newton_naive(
+                    self._epsilon_vec, self._t_mat, self._U, t_eff_mat_guess, 
+                    h_vec_guess, Z_vec_guess, K_vec_guess, self._beta, self._l_max, 
+                    self._N, self._N_at
                 )
             else:
-                raise ValueError('Dimer/Decoupled/Decoupled_Dimer.__init__ | ERROR: ITERATION argument')
+                raise ValueError('DecoupledDimer.__init__ | ERROR: ITERATION argument')
             
             if use_cache:
                 cache.save(params, {name: getattr(self, "_" + name) for name in self._ITERATION_NAMES})
@@ -149,7 +166,7 @@ class DecoupledDimer:
     def clear_cache(cls, cache_dir=None):
         """Delete all cached iteration results for the decoupled dimer"""
         IterationCache(cache_dir if cache_dir is not None else cls._CACHE_DIR,
-                       model_tag="coupled_dimer", version=cls._CACHE_VERSION).clear()
+                       model_tag=cls._MODEL_TAG, version=cls._CACHE_VERSION).clear()
 
     # ====================================================================
     #   PRIVATE METHODS
@@ -248,8 +265,7 @@ class DecoupledDimer:
 
     def __E0(self):
         """Calculate MF zero-point energy | E_0 = -\sum_j K_j sqrt(Z_j)"""
-        E0 = -np.sum(self._K_vec * np.sqrt(self._Z_vec))
-        return E0
+        return -np.sum(self._K_vec * np.sqrt(self._Z_vec))
     
     def __rotor_product(self):
         """Built the rotor product state from two sites |psi_1>|psi_2> with
@@ -262,7 +278,7 @@ class DecoupledDimer:
         evals_rotor_1, evecs_rotor_1 = self._evals_rotor_vec[1], self._evecs_rotor_vec[1]
         
         energies = (evals_rotor_0[:, None] + evals_rotor_1[None, :]).ravel()    # E_1 + E_2
-        bz = helpers._bz_weights(energies, self._beta) # normalized Boltzmann probabilities
+        bz = Helpers.bz_weights(energies, self._beta) # normalized Boltzmann probabilities
         
         # shift on the full product space, then rotate to the product eigenbasis
         prod_states = np.kron(evecs_rotor_0, evecs_rotor_1)                     
@@ -287,7 +303,7 @@ class DecoupledDimer:
  
         pole_vec, res_vec = [], []
         for i in range(2):                        # spinon orbitals
-            fd_spinon_vals = helpers._fermi(self._evals_spinon[i], self._beta)
+            fd_spinon_vals = Helpers.fermi(self._evals_spinon[i], self._beta)
             
             sr_mix = (1.0 - fd_spinon_vals) * p_rotor_ket + fd_spinon_vals * p_rotor_bra          # mix[n,m]
             spinon_coeff = self._evecs_spinon[:, i]
@@ -309,7 +325,7 @@ class DecoupledDimer:
         """Calculate ground-state energy w/o physical subspace projection"""
         E0 = self.__E0()
         E_gs_spinon, E_gs_rotor_vec = self._evals_spinon[0], self._evals_rotor_vec[:,0]
-        E_gs = 2*E_gs_spinon + np.sum(E_gs_rotor_vec) + E0
+        E_gs = self.N_at * E_gs_spinon + np.sum(E_gs_rotor_vec) + E0
         return E_gs
     
     def get_E_gs_proj(self, grand_canonical=False):
@@ -327,7 +343,7 @@ class DecoupledDimer:
 
         return E_proj
 
-    def get_occupation_vec(self):
+    def get_filling_vec(self):
         """Get spinon/electron occupation at each lattice site."""
         return self._nf_vec
     

@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from Utility import helpers
+from Utility.helpers import Helpers
 
 # ====================================================================
 #   SPINON SECTOR
@@ -14,17 +14,10 @@ def get_H_spinon(epsilon_vec, t_eff_mat, h_vec, mu):
     H = np.diag(epsilon_vec - h_vec - mu) - t_eff_mat
     return H
 
-def get_nf_vec(evals_spinon, evecs_spinon, beta, N_at=2):
-    """Calculate spinon occupation at all sites"""
-    nf = np.zeros(2)
-    for i in range(2):
-        sum = 0.0
-        for j in range(2):
-            energy = evals_spinon[j]
-            sum += (np.abs(evecs_spinon[i,j]) ** 2) * helpers._fermi(energy, beta)
-
-        nf[i] = N_at * sum
-
+def get_nf_vec(evals_spinon, evecs_spinon, beta, N_at):
+    """Calculate spinon occupation at all sites."""
+    fd_vals = [Helpers.fermi(energy, beta) for energy in evals_spinon]       
+    nf = N_at * (np.abs(evecs_spinon) ** 2 @ fd_vals)     
     return nf
 
 def get_t_eff(t_mat, Z_vec):
@@ -41,22 +34,17 @@ def get_H_rotor(U, h_vec, K_vec, l_max, site):
     dim = 2*l_max + 1
     l_vals = np.arange(-l_max, l_max + 1)
 
-    diag = ((U/2.0)*l_vals + h_vec[site]) * l_vals 
-    off_diag = K_vec[site] / 2.0
+    H_diag = ((U/2.0)*l_vals + h_vec[site]) * l_vals 
+    H_off_diag = K_vec[site] / 2.0
     
-    H = np.diag(diag)
-    H += np.diag(np.full(dim - 1, off_diag), k=1) + np.diag(np.full(dim - 1, off_diag), k=-1)
+    H = np.diag(H_diag)
+    H += np.diag(np.full(dim - 1, H_off_diag), k=1) + np.diag(np.full(dim - 1, H_off_diag), k=-1)
 
     return H
 
 def get_H_rotor_vec(U, h_vec, K_vec, l_max):
     """Calculate rotor Hamiltonian at all sites"""
-    dim = 2*l_max + 1
-
-    H_vec = np.zeros((2, dim, dim))
-    for i in range(2):
-        H_vec[i] = get_H_rotor(U, h_vec, K_vec, l_max, i)
-
+    H_vec = np.array([get_H_rotor(U, h_vec, K_vec, l_max, site) for site in range(N_sites)])
     return H_vec
 
 def get_rotor_eig_vec(U, h_vec, K_vec, l_max):
@@ -76,7 +64,7 @@ def get_L(evals_rotor, evecs_rotor, beta, l_max):
     l_vals = np.arange(-l_max, l_max + 1)
     l_expect_per_state = np.sum((np.abs(evecs_rotor)**2) * l_vals[:,np.newaxis], axis=0)
 
-    bz = helpers._bz_weights(evals_rotor, beta)
+    bz = Helpers.bz_weights(evals_rotor, beta)
     L = np.dot(bz, l_expect_per_state)
     return L
 
@@ -92,22 +80,22 @@ def get_Z_vec(evals_rotor_vec, evecs_rotor_vec, beta):
     Z_vec = np.zeros(2)
     for i in range(2):
         evals_rotor, evecs_rotor = evals_rotor_vec[i], evecs_rotor_vec[i]
-        bz_weights = helpers._bz_weights(evals_rotor, beta)
+        bz_weights = Helpers.bz_weights(evals_rotor, beta)
         mel = (evecs_rotor[:-1, :].conj() * evecs_rotor[1:, :]).sum(axis=0)
 
         Z_vec[i] = np.dot(bz_weights, mel)**2
 
     return Z_vec
 
-def get_K_vec(t_mat, Z_vec, evals_spinon, evecs_spinon, beta, Q=2):
+def get_K_vec(t_mat, Z_vec, evals_spinon, evecs_spinon, beta, N_at):
     """Calculate K values at every site"""
-    fd = np.array([helpers._fermi(energy, beta) for energy in evals_spinon])
+    fd = np.array([Helpers.fermi(energy, beta) for energy in evals_spinon])
     evecs_weighted = evecs_spinon * fd[np.newaxis,:]
 
     sqrt_Z = np.sqrt(Z_vec)
     rho = evecs_spinon.conj() @ evecs_weighted.T
 
-    K_vec = np.real(-2 * Q * np.sum(t_mat * sqrt_Z[np.newaxis,:] * rho, axis=1))
+    K_vec = np.real(-2 * N_at * np.sum(t_mat * sqrt_Z[np.newaxis,:] * rho, axis=1))
     return K_vec
 
 # ====================================================================

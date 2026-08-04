@@ -4,7 +4,7 @@ import sys
 
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from Utility import helpers
+from Utility.helpers import Helpers
 
 # ====================================================================
 #   Fermionic operators w/ Jordan-Wigner string construction
@@ -70,7 +70,7 @@ def mode(site, spin):
 # ====================================================================
 class ExactDimer:
     def __init__(self, epsilon, U, t, mu):
-        self.eps_vec = np.array([-epsilon, epsilon])
+        self.eps_vec = np.array([-epsilon/2.0, epsilon/2.0])
         self.t, self.U, self.mu = t, U, mu
 
         H = np.zeros((16, 16))
@@ -90,7 +90,7 @@ class ExactDimer:
         """Calculate Green's functions with the spectral representation | z can be Matsubara or retarded"""
         z = np.atleast_1d(np.asarray(z, dtype=complex))
 
-        bz = helpers._bz_weights(self.evals, beta)
+        bz = Helpers.bz_weights(self.evals, beta)
 
         Mi = self.evecs.T @ c_ann[mode(i, spin)] @ self.evecs    # <m|c_i|n>
         Lj = self.evecs.T @ c_cre[mode(j, spin)] @ self.evecs    # <m|c_j^+|n>
@@ -156,14 +156,15 @@ class ExactDimer:
         qp_weight = 1.0 / (1.0 - self_energy.imag / w0)
         return qp_weight
 
-    def get_occupation(self, beta=None):
+    def get_filling_vec(self, beta=None):
         """Calculate electron occupation at every site"""
-        bz_weights = helpers._bz_weights(self.evals, beta)
+        bz_weights = Helpers.bz_weights(self.evals, beta)
         n = np.zeros(2)
         for site in range(2):
             for spin in range(2):
                 nop = c_cre[mode(site, spin)] @ c_ann[mode(site, spin)]
                 n[site] += bz_weights @ np.einsum('am,ab,bm->m', self.evecs, nop, self.evecs)
+        
         return n
     
     def get_E_gs(self, grand_canonical=False):

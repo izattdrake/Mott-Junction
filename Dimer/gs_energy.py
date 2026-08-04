@@ -7,14 +7,14 @@ from Decoupled.decoupled_dimer import DecoupledDimer
 
 if __name__ == '__main__':
     epsilon, t, beta, l_max = 0.0, 1.0, None, 10
-    U_vals = np.linspace(0, 4, 100)
+    U_vals = np.linspace(0, 4, 10)
 
     gs_exact, gs_c, gs_dc, gs_c_proj, gs_dc_proj = [], [], [], [], []
     count = 1
     for U in U_vals:
         exact_dimer = ExactDimer(epsilon, U, t, mu=U/2)
-        coupled_dimer = CoupledDimer(epsilon, U, t, beta, l_max, print_cache_results=True)
-        decoupled_dimer = DecoupledDimer(epsilon, U, t, beta, l_max, print_cache_results=True)
+        coupled_dimer = CoupledDimer(epsilon, U, t, l_max, print_cache_results=True)
+        decoupled_dimer = DecoupledDimer(epsilon, U, t, l_max, use_cache=False)
 
         gs_exact.append(exact_dimer.get_E_gs())
 

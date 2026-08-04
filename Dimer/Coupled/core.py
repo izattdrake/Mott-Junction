@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from Utility import helpers
+from Utility.helpers import Helpers
 
 # ====================================================================
 #   CORE FUNCTIONALITY FOR COUPLED ROTOR PROBLEM ON A HUBBARD DIMER
@@ -62,7 +62,7 @@ def get_t_eff(evals_rotor, evecs_rotor, t, beta, l_max):
     shift_op[bra_index, ket_index] = 1.0  # |l1,l2> -> |l1+1,l2-1>
     shift_op[ket_index, bra_index] = 1.0  # |l1,l2> -> |l1-1,l2+1>
  
-    bz_weights = helpers._bz_weights(evals_rotor, beta)
+    bz_weights = Helpers.bz_weights(evals_rotor, beta)
  
     # <psi_n|S|psi_n> for each eigenstate n
     expectation_vals = np.real(np.sum(np.conj(evecs_rotor) * (shift_op @ evecs_rotor), axis=0))
@@ -71,7 +71,7 @@ def get_t_eff(evals_rotor, evecs_rotor, t, beta, l_max):
 
 def get_nf_vec(evals_spinon, evecs_spinon, beta):
     """Calculates spinon occupation at every site"""
-    fd_vals = helpers._fermi(evals_spinon, beta)
+    fd_vals = Helpers.fermi(evals_spinon, beta)
     nf_vec = 2 * np.abs(evecs_spinon)**2 @ fd_vals
     return nf_vec
 
@@ -99,12 +99,12 @@ def get_H_rotor(U, h_vec, J_eff, l_max):
 
 def get_J_eff(evals_spinon, evecs_spinon, t, beta):
     """Calculates J^{eff}_{12} | <f^+_1 f_2> calculated by diagaonlization then FD distribution"""
-    J_eff = 2 * t * np.sum(np.conj(evecs_spinon[0,:]) * evecs_spinon[1, :] * helpers._fermi(evals_spinon, beta))
+    J_eff = 2 * t * np.sum(np.conj(evecs_spinon[0,:]) * evecs_spinon[1, :] * Helpers.fermi(evals_spinon, beta))
     return J_eff
 
 def get_L(evals_rotor, evecs_rotor, beta, l_max, site):
     """Calculates thermal average <L_i> at one site"""
-    bz_weights = helpers._bz_weights(evals_rotor, beta)
+    bz_weights = Helpers.bz_weights(evals_rotor, beta)
 
     basis = get_eff_rotor_basis(l_max)
     l_vals = basis[:, site].astype(float)

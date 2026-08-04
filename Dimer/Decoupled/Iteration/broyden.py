@@ -96,7 +96,7 @@ def iterate_broyden(epsilon_vec, t_mat, U, t_eff_mat_guess, h_vec_guess, Z_vec_g
         evals_rotor_vec, evecs_rotor_vec = get_rotor_eig_vec(U, h_vec, K_vec, l_max)
 
         # Calculate nf and L for Jacobian
-        nf_vec = get_nf_vec(evals_spinon, evecs_spinon, beta)
+        nf_vec = get_nf_vec(evals_spinon, evecs_spinon, beta, N_at)
         L_vec = get_L_vec(evals_rotor_vec, evecs_rotor_vec, beta, l_max)
 
         f_vec = nf_vec - L_vec - N_at / 2.0
@@ -112,7 +112,7 @@ def iterate_broyden(epsilon_vec, t_mat, U, t_eff_mat_guess, h_vec_guess, Z_vec_g
 
         # Update parameters
         Z_vec_update = (1.0 - ALPHA_Z) * Z_vec + ALPHA_Z * get_Z_vec(evals_rotor_vec, evecs_rotor_vec, beta)
-        K_vec_update = (1.0 - ALPHA_K) * K_vec + ALPHA_K * get_K_vec(t_mat, Z_vec, evals_spinon, evecs_spinon, beta)
+        K_vec_update = (1.0 - ALPHA_K) * K_vec + ALPHA_K * get_K_vec(t_mat, Z_vec, evals_spinon, evecs_spinon, beta, N_at)
         t_eff_mat_update = (1 - ALPHA_T_EFF) * t_eff_mat + ALPHA_T_EFF * get_t_eff(t_mat, Z_vec)
 
         # Adjust total particle number
@@ -139,7 +139,7 @@ def iterate_broyden(epsilon_vec, t_mat, U, t_eff_mat_guess, h_vec_guess, Z_vec_g
     evals_spinon, evecs_spinon = np.linalg.eigh(get_H_spinon(epsilon_vec, t_eff_mat_update, h_vec_update, mu))
     evals_rotor_vec, evecs_rotor_vec = get_rotor_eig_vec(U, h_vec_update, K_vec_update, l_max)
 
-    nf_vec = get_nf_vec(evals_spinon, evecs_spinon, beta)
+    nf_vec = get_nf_vec(evals_spinon, evecs_spinon, beta, N_at)
     L_vec = get_L_vec(evals_rotor_vec, evecs_rotor_vec, beta, l_max)
 
     return evals_spinon, evecs_spinon, evals_rotor_vec, evecs_rotor_vec, h_vec_update, Z_vec_update, K_vec_update, t_eff_mat, nf_vec, L_vec, mu, count

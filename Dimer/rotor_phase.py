@@ -5,7 +5,7 @@ from Decoupled.decoupled_dimer import DecoupledDimer
 
 if __name__ == '__main__':
     epsilon, t, beta, l_max = 0.0, 1.0, None, 15
-    U_vals = np.array([5.01, 5.08])
+    U_vals = np.array([0.04, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 3.6, 3.7, 3.8, 3.9, 3.95, 3.96, 3.97, 3.98, 3.99, 4.0])
 
     theta_vals = np.linspace(0, 2*np.pi, 200)
     output_vals = np.zeros((len(theta_vals), len(U_vals)))
@@ -13,7 +13,7 @@ if __name__ == '__main__':
     count = 1
 
     for i in range(len(U_vals)):
-        dc_dimer = DecoupledDimer(epsilon, U_vals[i], t, beta, l_max, print_cache_results=True)
+        dc_dimer = DecoupledDimer(epsilon, U_vals[i], t, l_max, beta=beta, print_cache_results=True)
         states = dc_dimer._evecs_rotor_vec[0]
         rotor_gs = states[:,0]
         print(rotor_gs)

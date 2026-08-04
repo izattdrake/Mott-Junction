@@ -2,13 +2,15 @@ import numpy as np
 import sys
 
 from pathlib import Path
+
 from .Iteration.newton_gauge import iterate_newton_gauge
 from .Iteration.broyden import iterate_broyden
+from .Iteration.newton_naive import iterate_newton_naive
 
 from .core import get_H_spinon, get_H_rotor
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from Utility import helpers
+from Utility.helpers import Helpers
 from Utility.iteration_cache import IterationCache
 
 # ====================================================================
@@ -40,7 +42,8 @@ from Utility.iteration_cache import IterationCache
 class CoupledDimer:
     _CACHE_VERSION = 1.0
     _CACHE_DIR = Path(__file__).resolve().parent / "_cache"
- 
+    _MODEL_TAG = "coupled_dimer"
+
     """Names of the converged quantities in iteration methods" return order.
     Parameter guesses looked for in nearest parameter lookup, needed for calling fresh iteration"""
     _ITERATION_NAMES = ("h_vec", "t_eff", "J_eff", "nf_vec", "L_vec", "mu", "count")
@@ -58,7 +61,7 @@ class CoupledDimer:
         self._dim = 2*l_max + 1
  
         cache = IterationCache(cache_dir if cache_dir is not None else self._CACHE_DIR,
-                               model_tag="coupled_dimer", version=self._CACHE_VERSION)
+                               model_tag=self._MODEL_TAG, version=self._CACHE_VERSION)
         params = dict(epsilon=epsilon, U=U, t=t, beta=beta, lmax=l_max, N=N_target)
         data = cache.load(params, self._ITERATION_NAMES) if use_cache else None
         
@@ -105,7 +108,17 @@ class CoupledDimer:
                         print(f"CoupledDimer.__init__: Nearest start from "
                               f"{near['params']} (dist = {near['distance']:.3f})")
  
-            if iteration_method == 0:   # Newton"s method w/ gauge fix
+            if iteration_method == 0: # Modified Broyden"s method 
+                (
+                    self._evals_spinon, self._evecs_spinon, self._evals_rotor,
+                    self._evecs_rotor, self._h_vec, self._t_eff, self._J_eff,
+                    self._nf_vec, self._L_vec, self._mu, self._count
+                ) = iterate_broyden(
+                    self._epsilon_vec, self._U, self._t, 
+                    h_vec_guess, t_eff_guess, J_eff_guess, 
+                    self._beta, self._l_max, self._N_target
+                )
+            elif iteration_method == 1: # Newton's method w/ gauge fix
                 (
                     self._evals_spinon, self._evecs_spinon, self._evals_rotor,
                     self._evecs_rotor, self._h_vec, self._t_eff, self._J_eff,
@@ -115,12 +128,12 @@ class CoupledDimer:
                     h_vec_guess, t_eff_guess, J_eff_guess, 
                     self._beta, self._l_max, self._N_target
                 )
-            elif iteration_method == 1: # Modified Broyden"s method
+            elif iteration_method == 2: # Newton's method w/o gauge fix
                 (
                     self._evals_spinon, self._evecs_spinon, self._evals_rotor,
                     self._evecs_rotor, self._h_vec, self._t_eff, self._J_eff,
                     self._nf_vec, self._L_vec, self._mu, self._count
-                ) = iterate_broyden(
+                ) = iterate_newton_naive(
                     self._epsilon_vec, self._U, self._t, 
                     h_vec_guess, t_eff_guess, J_eff_guess, 
                     self._beta, self._l_max, self._N_target
@@ -143,7 +156,7 @@ class CoupledDimer:
     def clear_cache(cls, cache_dir=None):
         """Delete all cached iteration results for the coupled dimer"""
         IterationCache(cache_dir if cache_dir is not None else cls._CACHE_DIR,
-                       model_tag="coupled_dimer", version=cls._CACHE_VERSION).clear()
+                       model_tag=cls._MODEL_TAG, version=cls._CACHE_VERSION).clear()
 
     # ====================================================================
     #   PRIVATE METHODS
@@ -270,7 +283,7 @@ class CoupledDimer:
         shift_op[bra_index, ket_index] = 1.0 # |l1,l2> -> |l1+1,l2-1>
         shift_op += shift_op.T               # |l1,l2> -> |l1-1,l2+1>
 
-        bz = helpers._bz_weights(self._evals_rotor, self._beta)
+        bz = Helpers.bz_weights(self._evals_rotor, self._beta)
 
         # <psi_n|S|psi_n>        
         exp_vals = np.real(np.sum(np.conj(self._evecs_rotor) * (shift_op @ self._evecs_rotor), axis=0))
@@ -288,12 +301,12 @@ class CoupledDimer:
         # Rotor matrix elements: <m|e^{i\theta_j}|n>
         mel_rotor = np.stack([self._evecs_rotor.T @ self.__shift_op(site) @ self._evecs_rotor for site in range(2)])
         dE_rotor = self._evals_rotor[:, None] - self._evals_rotor[None, :]
-        bz_rotor = helpers._bz_weights(self._evals_rotor, self._beta)     # Rotor boltzmann probabilities
+        bz_rotor = Helpers.bz_weights(self._evals_rotor, self._beta)     # Rotor boltzmann probabilities
         p_rotor_ket, p_rotor_bra = bz_rotor[None, :], bz_rotor[:, None] 
-
+        
         pole_vec, res_vec = [], []
         for i in range(2):
-            fd_spinon_vals = helpers._fermi(self._evals_spinon[i], self._beta)
+            fd_spinon_vals = Helpers.fermi(self._evals_spinon[i], self._beta)
             
             sr_mix = fd_spinon_vals * p_rotor_bra + (1.0 - fd_spinon_vals) * p_rotor_ket    # Convolution of spinon/rotor GF"s
             spinon_coeff = self._evecs_spinon[:,i]                                           # spinon state coefficients
@@ -337,7 +350,7 @@ class CoupledDimer:
 
         return E_proj
 
-    def get_occupation_vec(self):
+    def get_filling_vec(self):
         """Get spinon/electron occupation at each lattice site."""
         return self._nf_vec
     
@@ -400,7 +413,7 @@ class CoupledDimer:
         for site in range(2):
             shift_op = self.__shift_op(site) # Create shift operator for respective site
             exp_vals = np.real(np.sum(np.conj(self._evecs_rotor) * (shift_op @ self._evecs_rotor), axis=0))
-            bz = helpers._bz_weights(self._evals_rotor)
+            bz = Helpers.bz_weights(self._evals_rotor)
             Z_vec[site] = np.sum(bz * exp_vals)
 
         return Z_vec

@@ -13,6 +13,7 @@ if __name__ == '__main__':
     epsilon, t, beta, l_max = 0.0, 1.0, None, 15
 
     U_vals = np.linspace(0.02, 4.0, 20)
+    
     exact_Z, c_Z, dc_Z = [], [], []
     count = 1
 
