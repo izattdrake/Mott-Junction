@@ -44,7 +44,7 @@ def get_H_rotor(U, h_vec, K_vec, l_max, site):
 
 def get_H_rotor_vec(U, h_vec, K_vec, l_max):
     """Calculate rotor Hamiltonian at all sites"""
-    H_vec = np.array([get_H_rotor(U, h_vec, K_vec, l_max, site) for site in range(N_sites)])
+    H_vec = np.array([get_H_rotor(U, h_vec, K_vec, l_max, site) for site in range(2)])
     return H_vec
 
 def get_rotor_eig_vec(U, h_vec, K_vec, l_max):
