@@ -25,6 +25,7 @@ class IterationCache:
 
     @staticmethod
     def _format(value):
+        print(value)
         """Regulates parameter->string conversion (handles int/float/None)"""
         if value is None:
             return 'None'
@@ -38,8 +39,7 @@ class IterationCache:
     @staticmethod
     def _is_same_value(x, y):
         """Bool check that also treats missing values as matching."""
-        check = x == y or (np.isnan(x) and np.isnan(y))
-        return check
+        return x == y or (np.isnan(x) and np.isnan(y))
  
     @staticmethod
     def _distance(wanted, candidate):
@@ -61,8 +61,7 @@ class IterationCache:
 
     def _key(self, params):
         """Creates key string for a set of parameters."""
-        key = '_'.join(f'{name}{self._format(val)}' for name, val in params.items())
-        return key
+        return '_'.join(f'{name}{self._format(val)}' for name, val in params.items())
 
     def _read_entry(self, file_path, names):
         """Read one cached file; return None if it is unreadable, written by different version,
@@ -79,20 +78,22 @@ class IterationCache:
                 params = {name: float(value) for name, value in zip(param_names, param_vals)}
                 
                 data = {name: stored[name] for name in names}
+
                 return params, data
         except Exception:
             return None      # Cannot be read for some reason
 
     def path(self, params):
         """Creates file's path string for a set of parameters."""
-        file_path = self.cache_dir / f'{self.model_tag}_{self._key(params)}.npz'
-        return file_path 
+        return self.cache_dir / f'{self.model_tag}_{self._key(params)}.npz' 
 
     def load(self, params, names):
         """Returns dictionary {name: value} if data is found; returns None otherwise"""
         path = self.path(params)
+
         if not path.exists():
             return None
+        
         try:
             with np.load(path, allow_pickle=False) as file:
                 if int(file['__version__']) != self.version:
@@ -153,6 +154,7 @@ class IterationCache:
                 continue
  
             dist = self._distance(wanted_params, candidate_params)
+            
             if dist < best_dist:
                 best_dist = dist
                 best_entry = {'params': candidate_params, 'data': candidate_data, 'distance': float(dist)}
