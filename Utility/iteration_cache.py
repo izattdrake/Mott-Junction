@@ -47,13 +47,8 @@ class IterationCache:
 
     @staticmethod
     def _is_same_value(x, y):
-        """Bool check that also treats missing values as matching."""
-        x_arr, y_arr = np.atleast_1d(x), np.atleast_1d(y)
-
-        if x_arr.shape != y_arr.shape:
-            return False
-        
-        return bool(np.all((x_arr == y_arr) or (np.isnan(x_arr) and np.isnan(y_arr)))) 
+        """Bool check that also treats missing values as matching."""        
+        return ((x == y) or (np.isnan(x) and np.isnan(y)))
     
     @staticmethod
     def _distance(wanted, candidate):
@@ -106,14 +101,14 @@ class IterationCache:
                 vecs = np.atleast_2d(np.asarray(file["epsilon_vecs"], float))
 
                 if vecs.shape[1] != int(N_sites):
-                    return empty    # Wrong size, no registry
+                    return empty    # Wrong size, no archive
                 
                 return vecs
         except Exception:
             return empty    # Cannot be read, return empty
         
     def _write_eps_archive(self, N_sites, epsilon_vecs):
-        """Automatically overwrite the epsilon registry for this system size."""
+        """Automatically overwrite the epsilon archive for this system size."""
         self._cache_dir.mkdir(parents=True, exist_ok=True)
         handle, temp_name = tempfile.mkstemp(dir=str(self._cache_dir), suffix=".npz")
         os.close(handle)
@@ -130,7 +125,7 @@ class IterationCache:
             raise
 
     def _eps_index(self, epsilon_vec, create=True):
-        """Index of this epsilon_vec in the registry. Searches the registry
+        """Index of this epsilon_vec in the archive. Searches the archive
         for epsilon_vec within self.tol. If it exists, its index is returned.
         If it doesn't, it is appended with the next inex returned if create=True
         Otherwise, None is returned."""
@@ -296,7 +291,7 @@ class IterationCache:
 
         for file_path in self._cache_dir.glob(f"{self._model_tag}_*.npz"):
             if file_path.name.startswith(f"{self._model_tag}_{self._VECTOR_NAME}_{self._SYS_SIZE_NAME}"):
-                continue    # Registry file, not a parameter data file
+                continue    # Archive file, not a parameter data file
 
             entry = self._read_entry(file_path, names)
 
