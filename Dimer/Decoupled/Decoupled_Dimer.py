@@ -325,7 +325,7 @@ class DecoupledDimer:
         """Calculate ground-state energy w/o physical subspace projection"""
         E0 = self.__E0()
         E_gs_spinon, E_gs_rotor_vec = self._evals_spinon[0], self._evals_rotor_vec[:,0]
-        E_gs = self.N_at * E_gs_spinon + np.sum(E_gs_rotor_vec) + E0
+        E_gs = self._N_at * E_gs_spinon + np.sum(E_gs_rotor_vec) + E0
         return E_gs
     
     def get_E_gs_proj(self, grand_canonical=False):

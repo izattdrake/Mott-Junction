@@ -49,9 +49,9 @@ class CoupledDimer:
     _ITERATION_NAMES = ("h_vec", "t_eff", "J_eff", "nf_vec", "L_vec", "mu", "count")
     _NEAREST_NAMES = ("h_vec", "t_eff", "J_eff")
 
-    def __init__(self, epsilon, U, t, l_max, beta=None, N_target=2, iteration_method=0,
-                 use_cache=True, cache_dir=None, try_nearest_params=True, nearest_params_max_dist=0.3, 
-                 print_cache_results=False):
+    def __init__(self, epsilon: float, U: float, t: float, l_max: int, beta: float=None, N_target: int=2, iteration_method: int=0,
+                 use_cache: bool=True, cache_dir: str=None, try_nearest_params: bool=True, nearest_params_max_dist: float=0.3, 
+                 print_cache_results: bool=False) -> None:
         """Takes parameter data and calculates self-consistent parameters and SR eigenspace solutions.
         Checks parameters against stored cache data; if cached, retrieves data. if not cached,
         calls an iteration method to find solutions. Eigenspace solutions are calcualted from
@@ -153,7 +153,7 @@ class CoupledDimer:
     #   CLASS/STATIC METHODS (PRIMARILY CACHE RELATED)
     # ====================================================================
     @classmethod
-    def clear_cache(cls, cache_dir=None):
+    def clear_cache(cls, cache_dir: str=None) -> None:
         """Delete all cached iteration results for the coupled dimer"""
         IterationCache(cache_dir if cache_dir is not None else cls._CACHE_DIR,
                        model_tag=cls._MODEL_TAG, version=cls._CACHE_VERSION).clear()
@@ -161,7 +161,7 @@ class CoupledDimer:
     # ====================================================================
     #   PRIVATE METHODS
     # ====================================================================
-    def __shift_op(self, site):
+    def __shift_op(self, site: int) -> np.ndarray:
         """Matrix of e^{i theta_j} in the |l1,l2> basis"""
         l1 = np.repeat(np.arange(-self._l_max, self._l_max+1), self._dim)
         l2 = np.tile(np.arange(-self._l_max, self._l_max+1), self._dim)
@@ -179,7 +179,7 @@ class CoupledDimer:
 
         return shift_op
 
-    def __jw_ops(self):
+    def __jw_ops(self) -> tuple[np.ndarray, np.ndarray]:
         """Jordan-Wigner electron operators on the 16-dim Fock space.
         Mode ordering: 0:1up 1:1down 2:2up 3:2down."""
         if hasattr(self, "_jw_cache"):
@@ -204,7 +204,7 @@ class CoupledDimer:
 
         return self._jw_cache
 
-    def __H_exact(self):
+    def __H_exact(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Exact Hubbard H (bare), number operator N, and the
         eigenspace solutions of K = H - mu_phys*N"""
         if hasattr(self, "_H_exact_cache"):
@@ -231,7 +231,7 @@ class CoupledDimer:
 
         return self._H_exact_cache
  
-    def __gs_proj(self):
+    def __gs_proj(self) -> np.ndarray:
         """Projected MF ground state as a normalized 16-dim Fock vector"""
         if hasattr(self, "_proj_cache"):
             return self._proj_cache
@@ -265,7 +265,7 @@ class CoupledDimer:
 
         return self._proj_cache
 
-    def __E0(self):
+    def __E0(self) -> float:
         """Calculate zero-point energy from the MF decoupling | E0 = \sum_{ij} J^{eff}_{ij} <cos(theta_i - theta_j)>"""
         if hasattr(self, "_E0_cache"):
             return self._E0_cache
@@ -292,7 +292,7 @@ class CoupledDimer:
 
         return self._E0_cache
         
-    def __gf_spectral_data(self, tol=1e-13):
+    def __gf_spectral_data(self, tol: float=1e-13) -> tuple[np.ndarray, np.ndarray]:
         """Calculate Green"s function data. Poles P_k, residues R_k[i,j] with G_ij(z) = sum_k R_k[i,j]/(z-P_k).
             Cached and saved on first call. Used for quickly calculating values."""
         if hasattr(self, "_gf_cache"):
@@ -324,18 +324,18 @@ class CoupledDimer:
     # ====================================================================
     #   PUBLIC METHODS
     # ====================================================================
-    def get_E_gs(self, grand_canonical=False):
+    def get_E_gs(self, grand_canonical: bool=False) -> float:
         """Calculate ground-state energy w/o physical subspace projection"""
         E0 = self.__E0()
         E_gs_spinon, E_gs_rotor = self._evals_spinon[0], self._evals_rotor[0]
         E_gs = 2*E_gs_spinon + E_gs_rotor + E0 # Spinon GS counted twice since it corresponds to 2x2 spin-subspace energy
         
         if grand_canonical:
-            E_gs -= self._U # -mu*N
+            E_gs -= self._U     # -mu*N
 
         return E_gs
     
-    def get_E_gs_proj(self, grand_canonical=False):
+    def get_E_gs_proj(self, grand_canonical: bool=False) -> float:
         """Calculate ground-state energy as the expected value of
         the MF ground state projected onto the physical subspace.
         Effectively a trial wavefunction using the variational 
@@ -344,17 +344,18 @@ class CoupledDimer:
         proj_state = self.__gs_proj()
 
         E_proj = float(proj_state @ H @ proj_state)
+
         if grand_canonical:
             E_proj -= self._mu_phys * float(proj_state @ N_op @ proj_state)
             # E_proj -= self._mu_phys * self._N_target
 
         return E_proj
 
-    def get_filling_vec(self):
+    def get_filling_vec(self) -> np.ndarray:
         """Get spinon/electron occupation at each lattice site."""
         return self._nf_vec
     
-    def get_gf(self, z, i=0, j=0):
+    def get_gf(self, z: np.ndarray, i: int=0, j: int=0):
         """Calculate Green"s function G_ij(z) on complex frequencies z (Matsubara or retarded okay) |
            Can pass scalar or vector values of z. Returns shape (len(z))"""
         z = np.atleast_1d(np.asarray(z, dtype=complex)) # If z is a scalar, make array
@@ -362,7 +363,7 @@ class CoupledDimer:
         gf_vals = np.sum(R[None, :, i, j] / (z[:, None] - P[None, :]), axis=1) 
         return gf_vals
     
-    def get_gf_matrix(self, z):
+    def get_gf_matrix(self, z: np.ndarray) -> np.ndarray:
         """Calculate the full 2x2 Green"s function matrix at scalar or vector values of z | returns shape (len(z), 2, 2)"""
         z = np.atleast_1d(np.asarray(z, dtype=complex)) # If z is a scalar, make array
         P, R = self.__gf_spectral_data() # Pull poles and residues
@@ -370,7 +371,7 @@ class CoupledDimer:
                       / (z[:, None, None, None] - P[None, :, None, None]), axis=1) # Form matrix
         return gf_mat
     
-    def get_self_energy_matrix(self, z):
+    def get_self_energy_matrix(self, z: np.ndarray) -> np.ndarray:
         """Self-energy from the Dyson equation Sigma(z) = G0(z)^{-1} - G(z)^{-1}
         Physical chemical potential mu_phys = mu + U/2 must be included to get
         Hartree shift seen in exact diagonalization benchmark"""
@@ -382,7 +383,7 @@ class CoupledDimer:
         self_energy_mat = np.linalg.inv(gf_bare) - np.linalg.inv(self.get_gf_matrix(z))
         return self_energy_mat
     
-    def get_spectral_vec(self, freqs, imag_delta=1e-4):
+    def get_spectral_vec(self, freqs: np.ndarray, imag_delta: float=1e-4) -> np.ndarray:
         """Calculate site-resolved spectral function output from retarded Green"s function"""
         freqs = np.real(freqs)
         spectral_vec = np.zeros((len(freqs),2))
@@ -393,7 +394,7 @@ class CoupledDimer:
 
         return spectral_vec
     
-    def get_qp_vec(self, domega=1e-5, delta=1e-4):
+    def get_qp_vec(self, domega: float=1e-5, delta: float=1e-4) -> np.ndarray:
         """Calculate quasiparticle weight Z as a finite difference of the retarded Green"s function"""
         Z_vec = np.zeros(2)
         z = np.array([-domega + 1j*delta, domega + 1j*delta])
@@ -405,7 +406,7 @@ class CoupledDimer:
 
         return Z_vec
     
-    def get_exp_shift_vec(self):
+    def get_exp_shift_vec(self) -> np.ndarray:
         """Thermal average of cos(theta_i) at each site | Assume no flux such that <cos(theta)> = <e^{i*theta}>.
         Gives zero everytime due to symmetry but... why not"""
         Z_vec = np.zeros(2)
@@ -418,13 +419,13 @@ class CoupledDimer:
 
         return Z_vec
 
-    def check_gf_sum(self):
+    def check_gf_sum(self) -> float:
         """Residues should sum to 1 at each site"""
         _, R = self.__gf_spectral_data()
         sum = np.array([R[:, 0, 0].sum(), R[:, 1, 1].sum()])
         return sum
 
-    def get_proj_fidelity(self):
+    def get_proj_fidelity(self) -> float:
         """Calculates projection of exact GS onto MF projected ground state <P Psi|Exact>"""
         _, _, _, evecs_K = self.__H_exact()
         proj_state = self.__gs_proj()

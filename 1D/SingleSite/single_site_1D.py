@@ -23,25 +23,21 @@ class SingleSite1D:
     _ITERATION_NAMES = ("h_vec", "Z_vec", "K_vec", "t_eff_mat", "nf_vec", "L_vec", "mu", "count")
     _NEAREST_NAMES = ("h_vec", "Z_vec", "K_vec", "t_eff_mat")
 
-    def __init__(self, epsilon_vec, U: float, t: float, l_max: int, beta:float, N_sites:int, N_at:int=2, PBC:bool=False, iteration_method:int=0,
-                 use_cache:bool=True, cache_dir=None, try_nearest_params=True, nearest_params_max_dist=0.3,
-                 print_cache_results=False):
+    _ALGO_NAMES = ['BROYDEN', 'NEWTON_GAUGE', 'NEWTON_NAIVE']
+
+    def __init__(self, epsilon_vec: np.ndarray, U: float, t: float, l_max: int, beta: float, N_sites: int, N_at: int, PBC: bool=False, 
+                 iteration_method: int=0, use_cache: bool=True, cache_dir: str=None, try_nearest_params: bool=True, 
+                 nearest_params_max_dist: float=0.3, print_cache_results: bool=False) -> None:
         """Takes parameter data and calculates self-consistent parameters and SR eigenspace solutions.
         Checks parameters against stored cache data; if cached, retrieves data. if not cached,
         calls an iteration method to find solutions. Eigenspace solutions are calculted from
-        retrieved parameters to save space.
-        
-        N: # of lattice sites
-        Q: # of states on a site
-        PBC: Periodic boundary conditions; adds hopping between first and last site if true
-        """
+        retrieved parameters to save space."""
         self._epsilon_vec = epsilon_vec # Even/opposite doping to preserve PHS, restricts chem. potential to U/2
         self._U, self._beta, self._l_max, self._N_sites, self._N_at = U, beta, l_max, N_sites, N_at
         self._N_target = int((N_sites * N_at) / 2.0) # Half-filling
 
         # Hopping matrix
         self._t_mat = np.diag(np.full(N_sites-1, t), k=1) + np.diag(np.full(N_sites-1, t), k=-1)
-
         if PBC:
             self._t_mat += np.diag(np.full(1, t), k=N_sites-1) + np.diag(np.full(1, t), k=-(N_sites-1))
 
@@ -49,7 +45,7 @@ class SingleSite1D:
 
         cache = IterationCache(cache_dir if cache_dir is not None else self._CACHE_DIR,
                                model_tag=self._MODEL_TAG, version=self._CACHE_VERSION)
-        params = dict(epsilon_vec=epsilon_vec, U=U, t=t, beta=beta, lmax=l_max, N=N_sites, Q=N_at, PBC=PBC)
+        params = dict(epsvec=epsilon_vec, U=U, t=t, beta=beta, lmax=l_max, Nsites=N_sites, Nat=N_at, PBC=PBC)
         data = cache.load(params, self._ITERATION_NAMES) if use_cache else None
         
         if data is not None:
@@ -69,7 +65,7 @@ class SingleSite1D:
             self._count        = int(data["count"])
 
             self._evals_spinon, self._evecs_spinon       = np.linalg.eigh(get_H_spinon(self._epsilon_vec, self._t_eff_mat, self._h_vec, self._mu))
-            self._evals_rotor_vec, self._evecs_rotor_vec = get_rotor_eig_vec(self._U, self._h_vec, self._K_vec, self._l_max)
+            self._evals_rotor_vec, self._evecs_rotor_vec = get_rotor_eig_vec(self._U, self._h_vec, self._K_vec, self._l_max, self._N_sites)
 
             if print_cache_results:
                 print(f"SingleSite1D.__init__: Cache hit: {cache.path(params).name}")
@@ -86,7 +82,7 @@ class SingleSite1D:
 
             # Search for nearest params 
             if use_cache and try_nearest_params:
-                near = cache.nearest(params, self._NEAREST_NAMES, must_match=("N", "Q", "PBC"))
+                near = cache.nearest(params, self._NEAREST_NAMES, must_match=("Nsites", "Nat", "PBC"))
                 if near is not None and near["distance"] <= nearest_params_max_dist:
                     near_data = near["data"]
 
@@ -100,7 +96,9 @@ class SingleSite1D:
                     if print_cache_results:
                         print(f"SingleSite1D.__init__: Nearest start from "
                               f"{near['params']} (dist = {near['distance']:.3f})")
- 
+                else:
+                    print(f"SingleSite1D.__init__: Nearest start not available. Running {self._ALGO_NAMES[iteration_method]} iteration algorithm.")
+            
             if iteration_method == 0: # Iteration w/ Broyden's method
                 (
                     self._evals_spinon, self._evecs_spinon, self._evals_rotor_vec, 
@@ -143,7 +141,7 @@ class SingleSite1D:
     #   CLASS/STATIC METHODS (PRIMARILY CACHE RELATED)
     # ====================================================================
     @classmethod
-    def clear_cache(cls, cache_dir=None):
+    def clear_cache(cls, cache_dir: str=None) -> None:
         """Delete all cached iteration results for the decoupled dimer"""
         IterationCache(cache_dir if cache_dir is not None else cls._CACHE_DIR,
                        model_tag=cls._MODEL_TAG, version=cls._CACHE_VERSION).clear()
@@ -152,24 +150,24 @@ class SingleSite1D:
     # ====================================================================
     #   PRIVATE METHODS
     # ====================================================================
-    def __E0(self):
+    def __E0(self) -> None:
         """Calculate MF zero-point energy | E_0 = -\sum_j K_j sqrt(Z_j)"""
         return -np.sum(self._K_vec * np.sqrt(self._Z_vec))
 
     # ====================================================================
     #   PUBLIC METHODS
     # ====================================================================
-    def get_filling_vec(self):
+    def get_filling_vec(self) -> np.ndarray:
         """Get spinon/electron occupation at each lattice site."""
         return self._nf_vec
 
-    def get_E_gs(self):
+    def get_E_gs(self) -> float:
         """Calculate ground-state energy w/o physical subspace projection."""
         E0 = self.__E0()
         E_gs_spinon, E_gs_rotor_vec = self._evals_spinon[0], self._evals_rotor_vec[:,0]
         E_gs = self._N_at * E_gs_spinon + np.sum(E_gs_rotor_vec) + E0
         return E_gs
     
-    def get_Z_vec(self):
+    def get_Z_vec(self) -> np.ndarray:
         """Get quasiparticle spectral weight."""
         return self._Z_vec

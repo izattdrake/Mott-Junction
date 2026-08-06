@@ -71,18 +71,18 @@ def gauge_projected_residual(f):
  
 def iterate_newton_gauge(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_guess, beta, l_max, N_target=2.0):
     """Calculate self-consistent parameters w/ Newton's method & gauge fix"""
-    MAX_ITER = 1e6
+    MAX_ITER = 1e7
  
-    ALPHA_H = 1e-1
-    ALPHA_T_EFF = 1e-1
-    ALPHA_J_EFF = 1e-1
-    ALPHA_MU = 1e-1
+    ALPHA_H = 1e-3
+    ALPHA_T_EFF = 1e-3
+    ALPHA_J_EFF = 1e-3
+    ALPHA_MU = 1e-3
  
     TOL_H = 1e-10
     TOL_T_EFF = 1e-10
     TOL_J_EFF = 1e-10
-    TOL_N  = 1e-8
-    TOL_PHYS_F = 1e-8
+    TOL_N  = 1e-6
+    TOL_PHYS_F = 1e-10
  
     mu = 0.0 # Global chemical potential
     dh = 1e-5 # Finite difference step | 1e-5 most accurate w/ fewest steps

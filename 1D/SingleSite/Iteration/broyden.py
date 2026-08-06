@@ -12,8 +12,8 @@ from ..core import (
     get_t_eff
 )
 
-def modified_broyden_step(f_vec, h_vec, alpha, weight, 
-                          dF_hist, u_hist, h_prev, f_prev):
+def modified_broyden_step(f_vec: np.ndarray, h_vec: np.ndarray, alpha: float, weight: float, 
+                          dF_hist: list, u_hist: list, h_prev: np.ndarray, f_prev: np.ndarray) -> np.ndarray:
     """
         One limited-memory modified-Broyden step.
         The history lists dF_hist and u_hist accumulate the (normalized) residual 
@@ -26,7 +26,7 @@ def modified_broyden_step(f_vec, h_vec, alpha, weight,
     norm = np.linalg.norm(dF)
     if norm < 1e-64:
         return alpha * f_vec
- 
+    
     dF_hat = dF / norm
     dh_hat = (h_vec - h_prev) / norm
     dF_hist.append(dF_hat)
@@ -41,9 +41,11 @@ def modified_broyden_step(f_vec, h_vec, alpha, weight,
  
     return alpha * f_vec - np.array(u_hist).T @ gamma
 
-def iterate_broyden(epsilon_vec, t_mat, U, t_eff_mat_guess, h_vec_guess, Z_vec_guess, K_vec_guess, l_max, beta, N_sites, N_at, N_target):
+def iterate_broyden(epsilon_vec: np.ndarray, t_mat: np.ndarray, U: float, t_eff_mat_guess: np.ndarray, 
+                    h_vec_guess: np.ndarray, Z_vec_guess: np.ndarray, K_vec_guess: np.ndarray, 
+                    l_max: int, beta: float, N_sites: int, N_at: int, N_target: int):
     """Calculate self-consistent parameters w/ modified Broyden's method"""
-    MAX_ITER = 1e6
+    MAX_ITER = 1e7
 
     ALPHA_H = 1e-3
     ALPHA_Z = 1e-3

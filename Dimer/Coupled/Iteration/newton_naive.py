@@ -29,12 +29,12 @@ from ..core import (
 
 def iterate_newton_naive(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_guess, beta, l_max, N_target=2.0):
     """Calculate self-consistent parameters w/ Newton's method w/o gauge fix"""
-    MAX_ITER = 1e6
+    MAX_ITER = 1e7
 
-    ALPHA_H = 1e-1
-    ALPHA_T_EFF = 1e-1
-    ALPHA_J_EFF = 1e-1
-    ALPHA_MU = 1e-1
+    ALPHA_H = 1e-3
+    ALPHA_T_EFF = 1e-3
+    ALPHA_J_EFF = 1e-3
+    ALPHA_MU = 1e-3
 
     TOL_H = 1e-10
     TOL_T_EFF = 1e-10
