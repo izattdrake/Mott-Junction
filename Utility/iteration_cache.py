@@ -20,9 +20,11 @@ from pathlib import Path
 class IterationCache:
     _VECTOR_NAME = "epsvec"          # the site-resolved parameter
     _INDEX_NAME = "epsindex"         # what replaces it in the key
-    _SYS_SIZE_NAME = "Nsites"               # parameter holding the system size
+    _SYS_SIZE_NAME = "Nsites"        # parameter holding the system size
 
-    def __init__(self, cache_dir, model_tag, version=1, tol=1e-12):
+    _WEIGHTS = {"U": 4.0}            # Weigh params differently for _distance calculation
+
+    def __init__(self, cache_dir: str, model_tag: str, version: float=1.0, tol: float=1e-12) -> None:
         self._cache_dir = Path(cache_dir)
         self._model_tag = model_tag
         self._version = version
@@ -32,7 +34,7 @@ class IterationCache:
     #   FORMATTING / COMPARISON METHODS
     # ====================================================================
     @staticmethod
-    def _format(value):
+    def _format(value: any) -> str:
         """Regulates parameter->string conversion (handles int/float/None)"""
         if value is None:
             return "None"
@@ -46,44 +48,48 @@ class IterationCache:
             raise ValueError
 
     @staticmethod
-    def _is_same_value(x, y):
+    def _is_same_value(x: any, y: any) -> bool:
         """Bool check that also treats missing values as matching."""        
         return ((x == y) or (np.isnan(x) and np.isnan(y)))
     
-    @staticmethod
-    def _distance(wanted, candidate):
+    def _distance(self, wanted: dict, candidate: dict) -> float:
         """Return relative Euclidean distance in parameter space of two parameter sets.
-        Values may be scalars or arrays with an epsilon_vec contributing one term
-        per site. Mismatched shapes are incomparable"""
+        Each parameter contributes its MEAN squared relative deviation, so an
+        epsilon_vec counts as one parameter regardless of system size.
+        Mismatched shapes are incomparable"""
         dist_sq = 0.0
         for name, wanted_val in wanted.items():
             candidate_val = candidate[name]
-            # Make values 1D arrays to equalize everything for epsilon_vec
+
+            # Make everying a 1D array like epsilon_vec to be on same footing
             wanted_arr = np.atleast_1d(np.asarray(wanted_val, float))
             candidate_arr = np.atleast_1d(np.asarray(candidate_val, float))
 
             if wanted_arr.shape != candidate_arr.shape:
-                return np.inf   # Different system size
+                return np.inf       # Different system size
 
+            param_sq = 0.0                         
             for w_val, c_val in zip(wanted_arr, candidate_arr):
                 if np.isnan(w_val) and np.isnan(c_val):
                     continue        # Both values absent, no distance
 
                 if np.isnan(w_val) or np.isnan(c_val):
                     return np.inf   # One value absent, infinite distance to disqualify
-    
-                dist_sq += ((w_val - c_val) / max(1.0, abs(w_val), abs(c_val))) ** 2
+
+                param_sq += ((w_val - c_val) / max(1.0, abs(w_val), abs(c_val))) ** 2   # <-- was dist_sq
+
+            dist_sq += self._WEIGHTS.get(name, 1.0) * param_sq / wanted_arr.size   # Average epsilon_vec parameter distance
 
         return np.sqrt(dist_sq)
-
+    
     # ====================================================================
     #   EPSILON_VEC HANDLING (ONE FILE PER SYSTEM SIZE)
     # ====================================================================
-    def _eps_archive_path(self, N_sites):
+    def _eps_archive_path(self, N_sites: int) -> str:
         """Path of the epsilon_vec file for this system size."""
         return self._cache_dir / f"{self._model_tag}_{self._VECTOR_NAME}_{self._SYS_SIZE_NAME}{int(N_sites)}.npz"
     
-    def _load_eps_archive(self, N_sites):
+    def _load_eps_archive(self, N_sites: int) -> str:
         """Reads all epsilon_vec's stored for this system size, of shape (N_, N_sites) 
         where N is the number of stored entries. Returns an empty (0, N) array if
         no epsilon_vec's have been recorded yet."""
@@ -107,7 +113,7 @@ class IterationCache:
         except Exception:
             return empty    # Cannot be read, return empty
         
-    def _write_eps_archive(self, N_sites, epsilon_vecs):
+    def _write_eps_archive(self, N_sites: int, epsilon_vecs: np.ndarray) -> None:
         """Automatically overwrite the epsilon archive for this system size."""
         self._cache_dir.mkdir(parents=True, exist_ok=True)
         handle, temp_name = tempfile.mkstemp(dir=str(self._cache_dir), suffix=".npz")
@@ -124,7 +130,7 @@ class IterationCache:
                 os.remove(temp_name)
             raise
 
-    def _eps_index(self, epsilon_vec, create=True):
+    def _eps_index(self, epsilon_vec: np.ndarray, create: bool=True) -> int:
         """Index of this epsilon_vec in the archive. Searches the archive
         for epsilon_vec within self.tol. If it exists, its index is returned.
         If it doesn't, it is appended with the next inex returned if create=True
@@ -143,7 +149,7 @@ class IterationCache:
         self._write_eps_archive(N_sites, np.vstack([archive, epsilon_vec[None, :]]))
         return int(archive.shape[0])
             
-    def _eps_from_index(self, index, N_sites):
+    def _eps_from_index(self, index: int, N_sites: int) -> np.ndarray:
         """Return epsilon_vec corresponding to index and N_sites. Returns
         None if doesn't exist."""
         archive = self._load_eps_archive(N_sites)
@@ -155,7 +161,7 @@ class IterationCache:
     # ====================================================================
     #   PARAMETER KEY 
     # ====================================================================
-    def _resolve(self, params, create=True):
+    def _resolve(self, params: dict, create: bool=True) -> dict:
         """Replace epsilon_vec by its archive index. Returns the integer
         parameter dict or None if the vector is unknown and create=False."""
         if self._VECTOR_NAME not in params:
@@ -177,11 +183,11 @@ class IterationCache:
 
         return resolved
 
-    def _key(self, params):
+    def _key(self, params: dict) -> str:
         """Creates key string for a set of parameters."""
         return "_".join(f"{name}{self._format(val)}" for name, val in params.items())
 
-    def path(self, params):
+    def path(self, params: dict) -> str:
         """Creates file's path string for a set of parameters."""
         resolved = self._resolve(params, create=True)
         return self._cache_dir / f"{self._model_tag}_{self._key(resolved)}.npz"
@@ -190,7 +196,7 @@ class IterationCache:
     # ====================================================================
     #   READ / WRITE METHODS
     # ====================================================================
-    def _read_entry(self, file_path, names):
+    def _read_entry(self, file_path: str, names) -> any:
         """Read one cached file; return None if it is unreadable, written by different version,
         or missing any needed quantity. Purpose is to report on stored parameters and their
         data for computing distance. IterationCache.load is a targeted lookup for a set of parameters."""
@@ -210,7 +216,7 @@ class IterationCache:
         except Exception:
             return None      # Cannot be read for some reason
 
-    def load(self, params, names):
+    def load(self, params: dict, names: np.ndarray) -> any:
         """Returns dictionary {name: value} if data is found; returns None otherwise"""
         resolved = self._resolve(params, create=False)
 
@@ -232,7 +238,7 @@ class IterationCache:
         except Exception:
             return None      # If failure for some reason, return None and iterate again
 
-    def save(self, params, data):
+    def save(self, params: dict, data) -> None:
         """Saves parameter dictionary {name: array-or-scalar} to file."""
         resolved = self._resolve(params, create=True)
         
@@ -259,7 +265,7 @@ class IterationCache:
     # ====================================================================
     #   NEAREST PARAMETER LOOKUP
     # ====================================================================
-    def _expand(self, params):
+    def _expand(self, params: dict) -> dict:
         """Swap epsilon_index back for the epsilon_vec it names to measure
         distances in parameter space."""
         if self._INDEX_NAME not in params or self._SYS_SIZE_NAME not in params:
@@ -276,7 +282,7 @@ class IterationCache:
 
         return expanded
     
-    def nearest(self, params, names, must_match=()):
+    def nearest(self, params: dict, names: np.ndarray, must_match=()) -> dict:
         """Find the cached data for input params closest in parameter space
         to those chosen. Parameters have equal weight with contribution
         being relative-scale Euclidean distance."""
@@ -324,7 +330,7 @@ class IterationCache:
     # ====================================================================
     #   INSPECTION / MAINTENANCE
     # ====================================================================
-    def summary(self):
+    def summary(self) -> tuple[dict, int]:
         """(Archive size, number of stored data entries) for this model."""
         if not self._cache_dir.exists():
             return {}, 0
@@ -340,9 +346,9 @@ class IterationCache:
 
         return archives, entries
     
-    def clear(self):
+    def clear(self) -> None:
         """Delete every cache entry and epsilon_vec archive belonging to this model tag."""
         if self._cache_dir.exists():
             for file_path in self._cache_dir.glob(f"{self._model_tag}_*.npz"):
                 file_path.unlink()
-            
+        

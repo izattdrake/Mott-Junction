@@ -6,7 +6,7 @@ from SingleSite.single_site_1D import SingleSite1D
 if __name__ == "__main__":
     t, l_max, N_sites = 1.0, 15, 100
     epsilon_vec = np.zeros(N_sites)
-    U_vals = np.linspace(0.04, 5.0, 60)
+    U_vals = np.linspace(0.04, 5.0, 50)
     gs_E2, gs_E4 = [], []
     count = 1
     for U in U_vals:
@@ -29,8 +29,8 @@ if __name__ == "__main__":
     plt.plot(U_vals, gs_E2, label=r"$N_{at}=2$", marker="o", linestyle="-", color="dodgerblue")
     plt.plot(U_vals, gs_E4, label=r"$N_{at}=4$", marker="o", linestyle="-", color="tomato")
 
-    plt.xlabel(r"$U$")
-    plt.ylabel(r"$E_{gs}$")
+    plt.xlabel(r"$U$", rotation=0, fontsize=16, labelpad=12)
+    plt.ylabel(r"$E_{gs}$", rotation=0, fontsize=16, labelpad=24)
     plt.title(r"Ground-State Energy as a Function of $U$ at half-filling: $\beta=\infty$, $N_{\text{sites}}=$" + f"{N_sites}")
     plt.grid(True, alpha=0.3)
     plt.legend()
