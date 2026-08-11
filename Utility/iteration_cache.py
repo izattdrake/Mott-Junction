@@ -22,7 +22,7 @@ class IterationCache:
     _INDEX_NAME = "epsindex"         # what replaces it in the key
     _SYS_SIZE_NAME = "Nsites"        # parameter holding the system size
 
-    _WEIGHTS = {"U": 4.0}            # Weigh params differently for _distance calculation
+    _WEIGHTS = {"U": 2.0}            # Weigh params differently for _distance calculation
 
     def __init__(self, cache_dir: str, model_tag: str, version: float=1.0, tol: float=1e-12) -> None:
         self._cache_dir = Path(cache_dir)
