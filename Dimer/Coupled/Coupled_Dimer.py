@@ -2,6 +2,7 @@ import numpy as np
 import sys
 
 from pathlib import Path
+from typing import Union, Sequence
 
 from .Iteration.newton_gauge import iterate_newton_gauge
 from .Iteration.broyden import iterate_broyden
@@ -49,7 +50,7 @@ class CoupledDimer:
     _ITERATION_NAMES = ("h_vec", "t_eff", "J_eff", "nf_vec", "L_vec", "mu", "count")
     _NEAREST_NAMES = ("h_vec", "t_eff", "J_eff")
 
-    def __init__(self, epsilon: float, U: float, t: float, l_max: int, beta: float=None, N_target: int=2, iteration_method: int=0,
+    def __init__(self, epsilon: float, U: float, t: float, l_max: int, beta: Union[float, None], N_target: int=2, iteration_method: int=0,
                  use_cache: bool=True, cache_dir: str=None, try_nearest_params: bool=True, nearest_params_max_dist: float=0.3, 
                  print_cache_results: bool=False) -> None:
         """Takes parameter data and calculates self-consistent parameters and SR eigenspace solutions.

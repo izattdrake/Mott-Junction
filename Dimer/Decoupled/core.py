@@ -1,6 +1,7 @@
 import numpy as np
 import sys
 
+from typing import Sequence, Union
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
@@ -14,7 +15,7 @@ def get_H_spinon(epsilon_vec, t_eff_mat, h_vec, mu):
     H = np.diag(epsilon_vec - h_vec - mu) - t_eff_mat
     return H
 
-def get_nf_vec(evals_spinon, evecs_spinon, beta, N_at):
+def get_nf_vec(evals_spinon, evecs_spinon, beta: Union[float, None], N_at):
     """Calculate spinon occupation at all sites."""
     fd_vals = [Helpers.fermi(energy, beta) for energy in evals_spinon]       
     nf = N_at * (np.abs(evecs_spinon) ** 2 @ fd_vals)     
@@ -29,7 +30,7 @@ def get_t_eff(t_mat, Z_vec):
 # ====================================================================
 #   ROTOR SECTOR
 # ====================================================================
-def get_H_rotor(U, h_vec, K_vec, l_max, site):
+def get_H_rotor(U, h_vec, K_vec, l_max: int, site: int):
     """Calculate rotor Hamiltonian at a site"""
     dim = 2*l_max + 1
     l_vals = np.arange(-l_max, l_max + 1)
@@ -42,12 +43,12 @@ def get_H_rotor(U, h_vec, K_vec, l_max, site):
 
     return H
 
-def get_H_rotor_vec(U, h_vec, K_vec, l_max):
+def get_H_rotor_vec(U, h_vec, K_vec, l_max: int):
     """Calculate rotor Hamiltonian at all sites"""
     H_vec = np.array([get_H_rotor(U, h_vec, K_vec, l_max, site) for site in range(2)])
     return H_vec
 
-def get_rotor_eig_vec(U, h_vec, K_vec, l_max):
+def get_rotor_eig_vec(U, h_vec, K_vec, l_max: int):
     """Calculate eigenvalues and eigenvectors of the rotor Hamiltonian at every site"""
     dim = 2*l_max + 1
 
@@ -59,7 +60,7 @@ def get_rotor_eig_vec(U, h_vec, K_vec, l_max):
 
     return evals_rotor_vec, evecs_rotor_vec
 
-def get_L(evals_rotor, evecs_rotor, beta, l_max):
+def get_L(evals_rotor, evecs_rotor, beta: Union[float, None], l_max: int):
     """Calculate thermal average <L_i> at site | arguemnts are the rotor eigenvalues and eigenvectors at that site"""
     l_vals = np.arange(-l_max, l_max + 1)
     l_expect_per_state = np.sum((np.abs(evecs_rotor)**2) * l_vals[:,np.newaxis], axis=0)
@@ -68,14 +69,14 @@ def get_L(evals_rotor, evecs_rotor, beta, l_max):
     L = np.dot(bz, l_expect_per_state)
     return L
 
-def get_L_vec(evals_rotor_vec, evecs_rotor_vec, beta, l_max):
+def get_L_vec(evals_rotor_vec, evecs_rotor_vec, beta: Union[float, None], l_max: int):
     """Return thermal expectation value of L with the rotor Hamiltonian at each lattice site"""
     L_vec = np.zeros(2)
     for i in range(2):
-        L_vec[i] = get_L(evals_rotor_vec[i], evecs_rotor_vec[i], beta, l_max)
+        L_vec[i] = get_L(evals_rotor_vec[i], evecs_rotor_vec[i], beta: Union[float, None], l_max)
     return L_vec
 
-def get_Z_vec(evals_rotor_vec, evecs_rotor_vec, beta):
+def get_Z_vec(evals_rotor_vec, evecs_rotor_vec, beta: Union[float, None]):
     """Calculate Z at every site"""
     Z_vec = np.zeros(2)
     for i in range(2):
@@ -87,7 +88,7 @@ def get_Z_vec(evals_rotor_vec, evecs_rotor_vec, beta):
 
     return Z_vec
 
-def get_K_vec(t_mat, Z_vec, evals_spinon, evecs_spinon, beta, N_at):
+def get_K_vec(t_mat, Z_vec, evals_spinon, evecs_spinon, beta: Union[float, None], N_at: int):
     """Calculate K values at every site"""
     fd = np.array([Helpers.fermi(energy, beta) for energy in evals_spinon])
     evecs_weighted = evecs_spinon * fd[np.newaxis,:]
@@ -101,7 +102,7 @@ def get_K_vec(t_mat, Z_vec, evals_spinon, evecs_spinon, beta, N_at):
 # ====================================================================
 #   ITERATION METHODS
 # ====================================================================
-def get_Jacobian_nf(epsilon_vec, t_eff_mat, h_vec, dh, mu, beta):
+def get_Jacobian_nf(epsilon_vec, t_eff_mat, h_vec, dh: float, beta: Union[float, None], mu: float):
     """Calculate Jacobian part from spinon sector"""
     J = np.zeros((2,2))
     for site in range(2):
@@ -119,7 +120,7 @@ def get_Jacobian_nf(epsilon_vec, t_eff_mat, h_vec, dh, mu, beta):
 
     return J
 
-def get_Jacobian_L(U, h_vec, dh, K_vec, beta, l_max):
+def get_Jacobian_L(U, h_vec, dh: float, K_vec: np.ndarray, beta: Union[float, None], l_max: int):
     """Calculate Jacobian part from rotor sector"""
     J = np.zeros((2,2))
 
@@ -139,9 +140,9 @@ def get_Jacobian_L(U, h_vec, dh, K_vec, beta, l_max):
 
     return J
 
-def get_Jacobian(epsilon_vec, U, t_eff_mat, h_vec, dh, mu, K_vec, beta, l_max):
+def get_Jacobian(epsilon_vec, U, t_eff_mat, h_vec, dh: float, K_vec: np.ndarray, beta: Union[float, None], l_max: int, mu: float):
     """Calculate Jacobian for Newton's method | J = J_nf - J_L"""
-    J_nf = get_Jacobian_nf(epsilon_vec, t_eff_mat, h_vec, dh, mu, beta)
+    J_nf = get_Jacobian_nf(epsilon_vec, t_eff_mat, h_vec, dh, beta, mu)
     J_L = get_Jacobian_L(U, h_vec, dh, K_vec, beta, l_max)
 
     J = J_nf - J_L

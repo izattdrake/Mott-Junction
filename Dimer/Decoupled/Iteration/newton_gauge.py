@@ -105,7 +105,7 @@ def iterate_newton_gauge(epsilon_vec, t_mat, U, t_eff_mat_guess, h_vec_guess, Z_
 
         f_vec = nf_vec - L_vec - N_at / 2.0
         phys_f_norm = gauge_projected_residual(f_vec) # Residual norm that must vanish
-        jacobian = get_Jacobian(epsilon_vec, U, t_eff_mat, h_vec, dh, mu, K_vec, beta, l_max)
+        jacobian = get_Jacobian(epsilon_vec, U, t_eff_mat, h_vec, dh, K_vec, beta, l_max, mu)
 
         delta_h = gauge_fixed_newton_step(jacobian, f_vec)
 

@@ -1,7 +1,9 @@
 import numpy as np
 import sys
 
+from typing import Sequence, Union
 from pathlib import Path
+
 from .Iteration.broyden import iterate_broyden
 from .Iteration.newton_gauge import iterate_newton_gauge
 from .Iteration.newton_naive import iterate_newton_naive
@@ -43,7 +45,7 @@ class DecoupledDimer:
     _ITERATION_NAMES = ("h_vec", "Z_vec", "K_vec", "t_eff_mat", "nf_vec", "L_vec", "mu", "count")
     _NEAREST_NAMES = ("h_vec", "Z_vec", "K_vec", "t_eff_mat")
 
-    def __init__(self, epsilon, U, t, l_max, beta=None, N_target=2, N_at=2, iteration_method=0,
+    def __init__(self, epsilon, U, t, l_max, beta: Union[float, None], N_target=2, N_at=2, iteration_method=0,
                  use_cache=True, cache_dir=None, try_nearest_params=True, nearest_params_max_dist=0.3,
                  print_cache_results=False):
         """Takes parameter data and calculates self-consistent parameters and SR eigenspace solutions.

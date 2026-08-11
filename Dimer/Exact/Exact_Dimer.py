@@ -26,11 +26,12 @@ from Utility.helpers import Helpers
 #   solves for the eigenspace solutions, then each method takes in the
 #   temperature, etc, and solves for the observables.
 # ====================================================================
+
 a_ann = np.array([[0., 1.], [0., 0.]])     # annihilation on one mode
 pauli_z = np.diag([1., -1.])               # (-1)^n string factor
 I = np.eye(2)                             # Identity operator
 
-def kron_matrix(*mats):
+def kron_matrix(*mats: np.ndarray) -> np.ndarray:
     out = mats[0]
     for mat in mats[1:]:
         out = np.kron(out, mat)
@@ -45,7 +46,7 @@ c_ann = [kron_matrix(a_ann, I, I, I),
 c_cre = [mat.T for mat in c_ann]
 
 # Mode index convention
-def mode(site, spin):               
+def mode(site: int, spin: int) -> int:               
     return 2 * site + spin
 
 # ====================================================================
@@ -69,7 +70,7 @@ def mode(site, spin):
 #   mu = U/2
 # ====================================================================
 class ExactDimer:
-    def __init__(self, epsilon, U, t, mu):
+    def __init__(self, epsilon: float, U: float, t: float, mu: float) -> None:
         self.eps_vec = np.array([-epsilon/2.0, epsilon/2.0])
         self.t, self.U, self.mu = t, U, mu
 
@@ -86,7 +87,7 @@ class ExactDimer:
 
         self.evals, self.evecs = np.linalg.eigh(H)
 
-    def get_gf(self, z, i=0, j=0, spin=0, beta=None):
+    def get_gf(self, z: float | np.ndarray, i: int=0, j: int=0, spin: int=0, beta: float | None=None):
         """Calculate Green's functions with the spectral representation | z can be Matsubara or retarded"""
         z = np.atleast_1d(np.asarray(z, dtype=complex))
 
@@ -101,7 +102,7 @@ class ExactDimer:
         gf_vals = np.sum(res.ravel()[None, :] / (z[:, None] - pol.ravel()[None, :]), axis=1)
         return gf_vals
 
-    def get_gf_mat(self, z, beta=None):
+    def get_gf_mat(self, z: float | np.ndarray, beta: float | None=None):
         """Calculate 2x2 Green's function matrix for the entire dimer"""
         z = np.atleast_1d(np.asarray(z, dtype=complex))
         gf_mat = np.empty((len(z), 2, 2), dtype=complex)
@@ -112,7 +113,7 @@ class ExactDimer:
 
         return gf_mat
     
-    def get_spectral_vec(self, freqs, imag_delta=1e-4, beta=None):
+    def get_spectral_vec(self, freqs: np.ndarray, imag_delta: float=1e-4, beta: float | None=None):
         """Calculate site-resolved spectral function output from retarded Green's function"""
         freqs = np.real(freqs)
         spectral_vec = np.zeros((len(freqs),2))
@@ -123,7 +124,7 @@ class ExactDimer:
 
         return spectral_vec
     
-    def get_self_energy_matrix(self, z, beta=None):
+    def get_self_energy_matrix(self, z: np.ndarray, beta: float=None):
         """Calculate self-energy from Dyson's equation"""
         z = np.atleast_1d(np.asarray(z, dtype=complex))
         h0 = np.array([[self.eps_vec[0] - self.mu, -self.t],    # Single-particle Hamiltonian
@@ -133,7 +134,7 @@ class ExactDimer:
         self_energy_mat = np.linalg.inv(gf_bare) - np.linalg.inv(self.get_gf_mat(z, beta))
         return self_energy_mat
 
-    def get_qp_vec(self, beta=None, domega=1e-4, imag_delta=1e-4):
+    def get_qp_vec(self, beta: float | None=None, domega: float=1e-4, imag_delta: float=1e-4):
         """Calculate QP weight from retarded GF | Uses finite difference method"""
         Z_vec = np.zeros(2)
         z = np.array([-domega + 1j*imag_delta, domega + 1j*imag_delta])
@@ -145,7 +146,7 @@ class ExactDimer:
 
         return Z_vec
 
-    def qp_weight_matsubara(self, beta, site=0):
+    def qp_weight_matsubara(self, beta: float | None, site: int=0):
         """Calculates quasiparticle weight with Matsubara self-energy.
         Used to check retarded self-energy approach."""
         if beta is None:
@@ -156,10 +157,11 @@ class ExactDimer:
         qp_weight = 1.0 / (1.0 - self_energy.imag / w0)
         return qp_weight
 
-    def get_filling_vec(self, beta=None):
+    def get_filling_vec(self, beta: float | None=None):
         """Calculate electron occupation at every site"""
         bz_weights = Helpers.bz_weights(self.evals, beta)
         n = np.zeros(2)
+
         for site in range(2):
             for spin in range(2):
                 nop = c_cre[mode(site, spin)] @ c_ann[mode(site, spin)]
@@ -167,10 +169,11 @@ class ExactDimer:
         
         return n
     
-    def get_E_gs(self, grand_canonical=False):
+    def get_E_gs(self, grand_canonical: bool=False):
         """Return GS energy w/o grand-canonical chemical potential shift"""
         E_gs = self.evals[0]
+
         if not grand_canonical:
             E_gs += self.U
-            
+
         return E_gs
