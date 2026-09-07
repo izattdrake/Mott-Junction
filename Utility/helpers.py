@@ -29,13 +29,14 @@ class Helpers:
         return bz / bz.sum()
 
     @staticmethod
-    def fermi(energy: float, beta: Union[float, None], mu: float=0.0) -> float:
-        """Calculate Fermi-Dirac distribution | T=0 handled by beta=None"""
+    def fermi(energies, beta: Union[float, None], mu: float=0.0) -> float:
+        """Calculate Fermi-Dirac distribution; T=0 handled by beta=None."""
         if beta is None:
-            fd_val = np.where(energy < mu, 1.0, np.where(energy > mu, 0.0, 0.5)) # E=mu returns 0.5 at zero-temperature
+            fd_vals = np.where(energies < mu, 1.0, np.where(energies > mu, 0.0, 0.5)) # E=mu returns 0.5 at zero-temperature
         else:
-            fd_val = 0.5 * (1.0 - np.tanh(0.5 * beta * energy))
-        return fd_val
+            fd_vals = 0.5 * (1.0 - np.tanh(0.5 * beta * energies))
+
+        return fd_vals
 
     @staticmethod
     def find_peaks(spectrum: np.ndarray) -> np.ndarray:

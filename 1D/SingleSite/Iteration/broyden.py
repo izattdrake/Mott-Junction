@@ -12,6 +12,26 @@ from ..core import (
     get_t_eff
 )
 
+"""Global parameters"""
+MAX_ITER = 1e7
+
+ALPHA_H = 1e-3
+ALPHA_Z = 1e-3
+ALPHA_K = 1e-3
+ALPHA_T_EFF = 1e-3
+ALPHA_MU = 1e-3
+
+TOL_H = 1e-9
+TOL_T_EFF = 1e-9
+TOL_Z = 1e-9
+TOL_K = 1e-9
+TOL_N = 1e-6
+TOL_F = 1e-9
+
+# Modified-Broyden control parameters
+WEIGHT = 1e-2
+MEMORY = 8
+
 def modified_broyden_step(f_vec: np.ndarray, h_vec: np.ndarray, alpha: float, weight: float, 
                           dF_hist: list, u_hist: list, h_prev: np.ndarray, f_prev: np.ndarray) -> np.ndarray:
     """
@@ -44,25 +64,7 @@ def modified_broyden_step(f_vec: np.ndarray, h_vec: np.ndarray, alpha: float, we
 def iterate_broyden(epsilon_vec: np.ndarray, t_mat: np.ndarray, U: float, t_eff_mat_guess: np.ndarray, 
                     h_vec_guess: np.ndarray, Z_vec_guess: np.ndarray, K_vec_guess: np.ndarray, 
                     l_max: int, beta: float, N_sites: int, N_at: int, N_target: int):
-    """Calculate self-consistent parameters w/ modified Broyden's method"""
-    MAX_ITER = 1e7
-
-    ALPHA_H = 1e-3
-    ALPHA_Z = 1e-3
-    ALPHA_K = 1e-3
-    ALPHA_T_EFF = 1e-3
-    ALPHA_MU = 1e-3
-
-    TOL_H = 1e-9
-    TOL_T_EFF = 1e-9
-    TOL_Z = 1e-9
-    TOL_K = 1e-9
-    TOL_N = 1e-6
-    TOL_F = 1e-9
-
-    WEIGHT = 1e-2
-    MEMORY = 8
-    
+    """Calculate self-consistent parameters w/ modified Broyden's method"""  
     mu = 0.0 # Global chemical potential
 
     dF_hist = []

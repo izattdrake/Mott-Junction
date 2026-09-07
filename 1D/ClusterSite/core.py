@@ -1,5 +1,6 @@
 import numpy as np
 import sys
+import itertools
 
 from typing import Union
 from pathlib import Path
@@ -14,13 +15,13 @@ def cluster_to_sites(m: int) -> tuple[int, int]:
     """Sites belonging to 2-site cluster m."""
     return (2 * m, 2 * m + 1)
 
-def cluster_id(N_sites):
+def cluster_id(N_sites: int) -> np.ndarray:
     """Calculate array of elements whos value indexes the 
     cluster it belongs to."""
     return np.arange(N_sites) // 2
 
-def cluster_mask(N_sites):
-    """Matrix cluster_id[i,j] = True if i & j in same cluster.
+def cluster_mask(N_sites: int) -> np.ndarray:
+    """Calculate the matrix cluster_id[i,j] = True if i & j in same cluster.
     False otherwise."""
     cluster_id = cluster_id(N_sites)
     return cluster_id[:, None] == cluster_id[None, :]
@@ -48,21 +49,23 @@ def get_shift_op(site: int, l_max: int) -> np.ndarray:
 # ====================================================================
 #   SPINON SECTOR
 # ====================================================================
-def get_H_spinon(epsilon_vec, h_vec, t_eff_mat: np.ndarray, mu: float):
+def get_H_spinon(epsilon_vec, t_eff_mat, h_vec, mu: float) -> np.ndarray:
     """Return spinon Hamiltonian in a spin-subspace"""
     return np.diag(epsilon_vec - h_vec - mu) - t_eff_mat
 
-def get_t_eff(t_mat, renorm_mat):
+def get_t_eff(t_mat, renorm_mat) -> np.ndarray:
     """Calculate effective spinon tunneling. t^{eff}_{ij} = t_{ij} Phi_{ij}"""
     return t_mat * renorm_mat
 
-def get_nf():
-
+def get_nf_vec(evals_spinon, evecs_spinon, beta: Union[float, None], N_at: int) -> np.ndarray:
+    fd_vals = Helpers.fermi(evals_spinon, beta)
+    nf_vec = N_at * np.abs(evecs_spinon)**2 @ fd_vals
+    return nf_vec
 
 # ====================================================================
 #   ROTOR SECTOR
 # ====================================================================
-def get_H_rotor(U:float, J_eff_mat, K_vec, h_vec, l_max: int, m: int):
+def get_H_rotor(U: float, J_eff_mat, K_vec, h_vec, l_max: int, m: int) -> np.ndarray:
     """Calculate the m-th cluster's rotor Hamiltonian. Written in the |l1 l2> basis."""
     dim = 2 * l_max + 1
     l1 = np.repeat(np.arange(-l_max, l_max + 1), dim)
@@ -103,7 +106,71 @@ def get_H_rotor(U:float, J_eff_mat, K_vec, h_vec, l_max: int, m: int):
 
     return H
 
-def get_renormalization_matrix(phi_vec, bond_vec, N_sites: int):
+def get_J_eff_mat(evals_spinon, evecs_spinon, t_mat, beta: Union[float, None], N_at: int) -> np.ndarray:
+    """Calculate rotor tunneling J_ij = \sum_{sigma} t_{ij} <f^+_{i sigma}f_{j sigma}>_f.
+    
+    evals_spinon    : (N,)  Spinon eigenvalues/energies
+    evecs_spinon    : (N,N) Diagonalizing matrix of the spinon Hamiltonian. U[i,j] = i-th component of j-th eigenvector
+    t_mat           : (N,N) Hopping matrix
+    """
+    U = evecs_spinon
+    fd_vals = Helpers.fermi(evals_spinon, beta)
+    return N_at * t_mat * ((U.conj() * fd_vals) @ U.T)  
+
+def get_K_vec(J_eff_mat, phi_vec, N_sites: int) -> np.ndarray:
+    """Calculate intra-cluster interaction parameter.
+    K_i = -2 \sum_{j notin C(i)}J^{eff}_{ij} phi_J"""
+    J_inter = np.where(cluster_mask(N_sites), 0.0, J_eff_mat)
+    return -2 * (J_inter @ phi_vec)
+
+def get_phi_vec(evals_rotor_vec, evecs_rotor_vec, l_max: int, beta: Union[float, None], N_sites: int) -> np.ndarray:
+    """Calculate <exp(i theta)> at every lattice site. 
+    
+    evals_rotor_vec     : (M,(2*l_max+1)**2)
+    evecs_rotor_vec     : (M,(2*l_max+1)**2,(2*l_max+1)**2)
+    """
+    N_clusters = int(N_sites/2)
+    phi_vec = np.zeros(N_sites)
+
+    for m in range(N_clusters):
+        cluster = cluster_to_sites(m)
+        
+        evals, evecs = evals_rotor_vec[m], evecs_rotor_vec[m]
+        bz_weights = Helpers.bz_weights(evals, beta)
+
+        for i in range(2):
+            site = cluster[i]
+            shift_op = get_shift_op(i, l_max)
+            
+            exp_vals = np.real(np.sum(evecs.conj() * (shift_op @ evecs), axis=0))
+
+            phi_vec[site] = np.sum(bz_weights * exp_vals)
+    
+    return phi_vec
+
+def get_bond_vec(evals_rotor_vec, evecs_rotor_vec, l_max: int, beta: Union[float, None], N_sites: int) -> np.ndarray:
+    """Calculate <exp(i(theta_1 - theta_2))> on every cluster.
+
+    evals_rotor_vec     : (M,(2*l_max+1)**2)
+    evecs_rotor_vec     : (M,(2*l_max+1)**2,(2*l_max+1)**2)
+    """
+    N_clusters = int(N_sites/2)
+    bond_vec = np.zeros(N_clusters)
+
+    # exp(i(theta_1 - theta_2)): raise l1, lower l2. Cluster-independent, so build once.
+    bond_op = get_shift_op(0, l_max) @ get_shift_op(1, l_max).conj().T
+
+    for m in range(N_clusters):
+        evals, evecs = evals_rotor_vec[m], evecs_rotor_vec[m]
+        bz_weights = Helpers.bz_weights(evals, beta)
+
+        exp_vals = np.real(np.sum(evecs.conj() * (bond_op @ evecs), axis=0))
+
+        bond_vec[m] = np.sum(bz_weights * exp_vals)
+
+    return bond_vec
+
+def get_renorm_mat(phi_vec, bond_vec, N_sites: int) -> np.ndarray:
     """Calculate the correlation matrix: Phi_{ij} = <exp[i(theta_i - theta_j)]> if sites i & j in same cluster; 
     Phi_{ij} = <exp(i theta_i)><exp(i theta_j)> otherwise.
 
@@ -124,66 +191,49 @@ def get_renormalization_matrix(phi_vec, bond_vec, N_sites: int):
     
     return renorm_mat
 
-def get_J_eff(evals_spinon, evecs_spinon, t_mat, beta: Union[float, None], N_at: int):
-    """Calculate rotor tunneling J_ij = \sum_{sigma} t_{ij} <f^+_{i sigma}f_{j sigma}>_f.
+def get_L(evals_rotor, evecs_rotor, beta: Union[float, None], l_max: int, site: int) -> float:
+    """Calculate thermal average <L_i> at a site.
     
-    evals_spinon    : (N,)  Spinon eigenvalues/energies
-    evecs_spinon    : (N,N) Diagonalizing matrix of the spinon Hamiltonian. U[i,j] = i-th component of j-th eigenvector
-    t_mat           : (N,N) Hopping matrix
+    site    : site in cluster (0 or 1)
     """
-    U = evecs_spinon
-    fd_vals = np.array([Helpers.fermi(energy, beta) for energy in evals_spinon])
-    return N_at * t_mat * ((U.conj() * fd_vals) @ U.T)  
+    bz_weights = Helpers.bz_weights(evals_rotor, beta)
+    l_vals = np.array(list(itertools.product(
+            np.arange(-l_max, l_max+1), np.arange(-l_max, l_max+1)
+    )))[:, site].astype(float)
 
-def get_K_vec(J_eff_mat, phi_vec, N_sites, ):
-    """Calculate intra-cluster interaction parameter.
-    K_i = -2 \sum_{j notin C(i)}J^{eff}_{ij} phi_J"""
-    J_inter = np.where(cluster_mask(N_sites), 0.0, J_eff_mat)
-    return -2 * (J_inter @ phi_vec)
+    exp_vals = l_vals @ np.abs(evecs_rotor)**2
+    L = np.sum(bz_weights * exp_vals)
 
-def get_phi_vec(evals_rotor_vec, evecs_rotor_vec, l_max:int, beta: Union[float, None], N_sites: int):
-    """Calculate <exp(i theta)> at every lattice site. 
+    return L
+
+def get_L_vec(evals_rotor_vec, evecs_rotor_vec, beta: Union[float, None], l_max: int, N_sites: int) -> np.ndarray:
+    """Calculate thermal average <L_i> at every site.
     
     evals_rotor_vec     : (M,(2*l_max+1)**2)
     evecs_rotor_vec     : (M,(2*l_max+1)**2,(2*l_max+1)**2)
     """
-    N_clusters = int(N_sites/2)
-    phi_vec = np.zeros(N_sites)
-    
+    N_clusters = int(N_sites / 2)
+    L_vec = np.zeros(N_sites)
+
     for m in range(N_clusters):
         cluster = cluster_to_sites(m)
-        
         evals, evecs = evals_rotor_vec[m], evecs_rotor_vec[m]
-        bz_weights = Helpers.bz_weights(evals, beta)
-
         for i in range(2):
             site = cluster[i]
-            shift_op = get_shift_op(i, l_max)
-            
-            exp_vals = np.real(np.sum(np.conj(evecs) * (shift_op @ evecs), axis=0))
+            L_vec[site] = get_L(evals, evecs, beta, l_max, i)
 
-            phi_vec[site] = np.sum(bz_weights * exp_vals)
-    
-    return phi_vec
+    return L_vec
 
-def get_bond_vec(evals_rotor_vec, evecs_rotor_vec, l_max: int, beta: Union[float, None], N_sites: int):
-    """Calculate <exp(i(theta_1 - theta_2))> on every cluster.
+def get_rotor_eig_vec(U: float, J_eff_mat, K_vec, h_vec, l_max: int, N_sites) -> tuple[np.ndarray, np.ndarray]:
+    """Calculate eigenvalues and eigenvectors of the rotor Hamiltonian at every site"""
+    dim_cluster = (2*l_max + 1)**2
 
-    evals_rotor_vec     : (M,(2*l_max+1)**2)
-    evecs_rotor_vec     : (M,(2*l_max+1)**2,(2*l_max+1)**2)
-    """
-    N_clusters = int(N_sites/2)
-    bond_vec = np.zeros(N_clusters)
+    N_cluster = int(N_sites / 2)
 
-    # exp(i(theta_1 - theta_2)): raise l1, lower l2. Cluster-independent, so build once.
-    bond_op = get_shift_op(0, l_max) @ get_shift_op(1, l_max).conj().T
+    evals_rotor_vec = np.zeros((N_cluster, dim_cluster))
+    evecs_rotor_vec = np.zeros((N_cluster, dim_cluster, dim_cluster))
 
-    for m in range(N_clusters):
-        evals, evecs = evals_rotor_vec[m], evecs_rotor_vec[m]
-        bz_weights = Helpers.bz_weights(evals, beta)
+    for m in range(N_cluster):
+        evals_rotor_vec[m], evecs_rotor_vec[m] = np.linalg.eigh(get_H_rotor(U, J_eff_mat, K_vec, h_vec, l_max, m))
 
-        exp_vals = np.real(np.sum(np.conj(evecs) * (bond_op @ evecs), axis=0))
-
-        bond_vec[m] = np.sum(bz_weights * exp_vals)
-
-    return bond_vec
+    return evals_rotor_vec, evecs_rotor_vec

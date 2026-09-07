@@ -6,3 +6,7 @@ code_dump.py
 effective_dimer_dump.py
 eff_dimer_inhom_dump.py
 Dimer/Exact/test.py
+1D/SingleSite/_cache
+1D/ClusterSite/_cache
+Dimer/Couopled/_cache
+Dimer/Decouopled/_cache

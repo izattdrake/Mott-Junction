@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from SingleSite.single_site_1D import SingleSite1D
 
 if __name__ == "__main__":
-    t, l_max, N_sites = 1.0, 15, 100
+    t, l_max, N_sites = (1.0,0.1), 15, 100
     epsilon_vec = np.zeros(N_sites)
     U_vals = np.linspace(0.04, 5.0, 50)
     gs_E2, gs_E4 = [], []
