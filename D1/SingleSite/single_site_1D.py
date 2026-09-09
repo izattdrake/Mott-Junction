@@ -70,6 +70,8 @@ class SingleSite1D:
         self._epsilon_vec = epsilon_vec
         self._U, self._l_max, self._beta, self._N_sites, self._N_at = U, l_max, beta, N_sites, N_at
         self._N_target = int((N_sites * N_at) / 2.0)            # Half-filling
+        
+        self._t_vec = np.atleast_1d(t)
         self._t_mat = Helpers.hopping_matrix(t, N_sites, PBC)
 
         self._dim = 2 * l_max + 1 # Dimension for one site
@@ -189,8 +191,7 @@ class SingleSite1D:
         """Calculate ground-state energy w/o physical subspace projection."""
         E0 = self.__E0()
         E_gs_spinon, E_gs_rotor_vec = self._evals_spinon[0], self._evals_rotor_vec[:,0]
-        E_gs = self._N_at * E_gs_spinon + np.sum(E_gs_rotor_vec) + E0
-        return E_gs
+        return self._N_at * E_gs_spinon + np.sum(E_gs_rotor_vec) + E0
     
     def get_Z_vec(self) -> np.ndarray:
         """Get quasiparticle spectral weight."""

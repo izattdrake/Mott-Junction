@@ -18,17 +18,17 @@ from ..core import (
 MAX_ITER    = 1e7
 
 ALPHA_H     = 1e-3
-ALPHA_T_EFF = 1e-3
-ALPHA_J_EFF = 1e-3
-ALPHA_K     = 1e-3
-ALPHA_MU    = 1e-3
+ALPHA_T_EFF = 2e-2
+ALPHA_J_EFF = 2e-2
+ALPHA_K     = 2e-2
+ALPHA_MU    = 2e-2
 
-TOL_H       = 1e-10
-TOL_T_EFF   = 1e-10
-TOL_J_EFF   = 1e-10
-TOL_K       = 1e-10
-TOL_N       = 1e-6
-TOL_F       = 1e-10
+TOL_H       = 1e-4
+TOL_T_EFF   = 1e-4
+TOL_J_EFF   = 1e-4
+TOL_K       = 1e-4
+TOL_N       = 1e-4
+TOL_F       = 1e-4
 
 # Modified-Broyden control parameters
 WEIGHT      = 1e-2
@@ -120,8 +120,22 @@ def iterate_broyden(epsilon_vec, U: float, t_mat, h_vec_guess, t_eff_mat_guess, 
             np.linalg.norm(f_vec) < TOL_F
         )
         
-        count += 1
- 
+        did_converge = (
+            np.allclose(t_eff_mat_update, t_eff_mat, atol=TOL_T_EFF) and
+            np.allclose(J_eff_mat_update, J_eff_mat, atol=TOL_J_EFF) and
+            np.allclose(K_vec_update, K_vec, atol=TOL_K) and
+            np.allclose(N, N_target, atol=TOL_N) 
+        )
+
+        print(count); count += 1
+        print(h_vec_update)
+        print(f"h: {np.allclose(h_vec_update, h_vec, atol=TOL_H)}")
+        print(f"t_eff: {np.allclose(t_eff_mat_update, t_eff_mat, atol=TOL_T_EFF)}")
+        print(f"J_eff: {np.allclose(J_eff_mat_update, J_eff_mat, atol=TOL_J_EFF)}")
+        print(f"K_vec: {np.allclose(K_vec_update, K_vec, atol=TOL_K)}")
+        print(f"N: {np.allclose(N, N_target, atol=TOL_N)}")
+        print(f"f: {np.linalg.norm(f_vec) < TOL_F}\n\n")
+
     if not did_converge:
         print(f'ERROR: Did not converge after {MAX_ITER} iterations')
         sys.exit()
@@ -129,7 +143,11 @@ def iterate_broyden(epsilon_vec, U: float, t_mat, h_vec_guess, t_eff_mat_guess, 
     evals_spinon, evecs_spinon = np.linalg.eigh(get_H_spinon(epsilon_vec, t_eff_mat, h_vec, mu))
     evals_rotor_vec, evecs_rotor_vec = get_rotor_eig_vec(U, J_eff_mat, K_vec, h_vec, l_max, N_sites)
  
+    phi_vec = get_phi_vec(evals_rotor_vec, evecs_rotor_vec, l_max, beta, N_sites)
+    bond_vec = get_bond_vec(evals_rotor_vec, evecs_rotor_vec, l_max, beta, N_sites)
+    renorm_mat = get_renorm_mat(phi_vec, bond_vec, N_sites)
+
     nf_vec = get_nf_vec(evals_spinon, evecs_spinon, beta, N_at)
     L_vec = get_L_vec(evals_rotor_vec, evecs_rotor_vec, beta, l_max, N_sites)
 
-    return evals_spinon, evecs_spinon, evals_rotor_vec, evecs_rotor_vec, h_vec_update, t_eff_mat_update, J_eff_mat_update, K_vec_update, nf_vec, L_vec, mu, count
+    return evals_spinon, evecs_spinon, evals_rotor_vec, evecs_rotor_vec, h_vec_update, t_eff_mat_update, J_eff_mat_update, K_vec_update, renorm_mat, phi_vec, nf_vec, L_vec, mu, count

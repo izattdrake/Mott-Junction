@@ -67,7 +67,7 @@ class Helpers:
         t = np.atleast_1d(t)
         dist = len(t)
 
-        if dist >= N_sites - 1: 
+        if dist > N_sites - 1: 
             raise ValueError
 
         t_mat = np.zeros((N_sites, N_sites))

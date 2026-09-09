@@ -23,8 +23,8 @@ def cluster_id(N_sites: int) -> np.ndarray:
 def cluster_mask(N_sites: int) -> np.ndarray:
     """Calculate the matrix cluster_id[i,j] = True if i & j in same cluster.
     False otherwise."""
-    cluster_id = cluster_id(N_sites)
-    return cluster_id[:, None] == cluster_id[None, :]
+    cluster_id_mat = cluster_id(N_sites)
+    return cluster_id_mat[:, None] == cluster_id_mat[None, :]
 
 def get_shift_op(site: int, l_max: int) -> np.ndarray:
     """Matrix of e^{i theta_i} in the |l1,l2> basis"""
