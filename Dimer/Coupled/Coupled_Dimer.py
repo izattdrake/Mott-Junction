@@ -50,8 +50,8 @@ class CoupledDimer:
     _ITERATION_NAMES = ("h_vec", "t_eff", "J_eff", "nf_vec", "L_vec", "mu", "count")
     _NEAREST_NAMES = ("h_vec", "t_eff", "J_eff")
 
-    def __init__(self, epsilon: float, U: float, t: float, l_max: int, beta: Union[float, None], N_target: int=2, iteration_method: int=0,
-                 use_cache: bool=True, cache_dir: str=None, try_nearest_params: bool=True, nearest_params_max_dist: float=0.3, 
+    def __init__(self, epsilon: float, U: float, t: float, l_max: int, beta: Union[None, float]=None, N_target: int=2, iteration_method: int=0,
+                 use_cache: bool=True, cache_dir: str=None, try_nearest_params: bool=True, nearest_params_max_dist: float=0.5, 
                  print_cache_results: bool=False) -> None:
         """Takes parameter data and calculates self-consistent parameters and SR eigenspace solutions.
         Checks parameters against stored cache data; if cached, retrieves data. if not cached,
@@ -352,6 +352,18 @@ class CoupledDimer:
 
         return E_proj
 
+    def rotor_gs(self, theta_vals, site=0):
+        """Calculates rotor ground state output in the exp(i l theta) basis"""
+        l_vals = np.arange(-self._l_max, self._l_max+1)
+        evec_rotor_gs = self._evecs_rotor_vec[site][:,0]
+        
+        output = []
+        for i in range(len(theta_vals)):
+            val = np.abs(evec_rotor_gs @ np.exp(1j * l_vals * theta_vals[i])) / np.sqrt(2*np.pi)
+            output.append(val)
+
+        return np.array(output)
+    
     def get_filling_vec(self) -> np.ndarray:
         """Get spinon/electron occupation at each lattice site."""
         return self._nf_vec

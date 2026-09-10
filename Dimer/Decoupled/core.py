@@ -51,7 +51,7 @@ def get_H_rotor_vec(U, h_vec, K_vec, l_max: int):
 def get_rotor_eig_vec(U, h_vec, K_vec, l_max: int):
     """Calculate eigenvalues and eigenvectors of the rotor Hamiltonian at every site"""
     dim = 2*l_max + 1
-
+    print(l_max)
     evals_rotor_vec = np.zeros((2, dim))
     evecs_rotor_vec = np.zeros((2, dim, dim))
 
@@ -72,8 +72,10 @@ def get_L(evals_rotor, evecs_rotor, beta: Union[float, None], l_max: int):
 def get_L_vec(evals_rotor_vec, evecs_rotor_vec, beta: Union[float, None], l_max: int):
     """Return thermal expectation value of L with the rotor Hamiltonian at each lattice site"""
     L_vec = np.zeros(2)
+    
     for i in range(2):
-        L_vec[i] = get_L(evals_rotor_vec[i], evecs_rotor_vec[i], beta: Union[float, None], l_max)
+        L_vec[i] = get_L(evals_rotor_vec[i], evecs_rotor_vec[i], beta, l_max)
+   
     return L_vec
 
 def get_Z_vec(evals_rotor_vec, evecs_rotor_vec, beta: Union[float, None]):

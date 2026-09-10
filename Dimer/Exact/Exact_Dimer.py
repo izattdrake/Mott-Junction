@@ -6,6 +6,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from Utility.helpers import Helpers
 
+from typing import Union
+
 # ====================================================================
 #   Fermionic operators w/ Jordan-Wigner string construction
 # --------------------------------------------------------------------
@@ -87,7 +89,7 @@ class ExactDimer:
 
         self.evals, self.evecs = np.linalg.eigh(H)
 
-    def get_gf(self, z: float | np.ndarray, i: int=0, j: int=0, spin: int=0, beta: float | None=None):
+    def get_gf(self, z: Union[float, np.ndarray], i: int=0, j: int=0, spin: int=0, beta: Union[None, float]=None):
         """Calculate Green's functions with the spectral representation | z can be Matsubara or retarded"""
         z = np.atleast_1d(np.asarray(z, dtype=complex))
 
@@ -102,7 +104,7 @@ class ExactDimer:
         gf_vals = np.sum(res.ravel()[None, :] / (z[:, None] - pol.ravel()[None, :]), axis=1)
         return gf_vals
 
-    def get_gf_mat(self, z: float | np.ndarray, beta: float | None=None):
+    def get_gf_mat(self, z: Union[float, np.ndarray], beta: Union[None, float]=None):
         """Calculate 2x2 Green's function matrix for the entire dimer"""
         z = np.atleast_1d(np.asarray(z, dtype=complex))
         gf_mat = np.empty((len(z), 2, 2), dtype=complex)
@@ -113,15 +115,15 @@ class ExactDimer:
 
         return gf_mat
     
-    def get_spectral_vec(self, freqs: np.ndarray, imag_delta: float=1e-4, beta: float | None=None):
+    def get_spectral_vec(self, freqs: np.ndarray, imag_delta: float=1e-4, beta: Union[None,float]=None):
         """Calculate site-resolved spectral function output from retarded Green's function"""
         freqs = np.real(freqs)
         spectral_vec = np.zeros((len(freqs),2))
+        print(f"here")
 
         for site in range(2):
             spectral_vals = -np.imag(self.get_gf(freqs + 1j*imag_delta, i=site, j=site, beta=beta)) / np.pi
             spectral_vec[:,site] = spectral_vals
-
         return spectral_vec
     
     def get_self_energy_matrix(self, z: np.ndarray, beta: float=None):
@@ -134,7 +136,7 @@ class ExactDimer:
         self_energy_mat = np.linalg.inv(gf_bare) - np.linalg.inv(self.get_gf_mat(z, beta))
         return self_energy_mat
 
-    def get_qp_vec(self, beta: float | None=None, domega: float=1e-4, imag_delta: float=1e-4):
+    def get_qp_vec(self, beta: Union[None, float]=None, domega: float=1e-4, imag_delta: float=1e-4):
         """Calculate QP weight from retarded GF | Uses finite difference method"""
         Z_vec = np.zeros(2)
         z = np.array([-domega + 1j*imag_delta, domega + 1j*imag_delta])
@@ -146,7 +148,7 @@ class ExactDimer:
 
         return Z_vec
 
-    def qp_weight_matsubara(self, beta: float | None, site: int=0):
+    def qp_weight_matsubara(self, beta: Union[None, float], site: int=0):
         """Calculates quasiparticle weight with Matsubara self-energy.
         Used to check retarded self-energy approach."""
         if beta is None:
@@ -157,7 +159,7 @@ class ExactDimer:
         qp_weight = 1.0 / (1.0 - self_energy.imag / w0)
         return qp_weight
 
-    def get_filling_vec(self, beta: float | None=None):
+    def get_filling_vec(self, beta: Union[None, float]=None):
         """Calculate electron occupation at every site"""
         bz_weights = Helpers.bz_weights(self.evals, beta)
         n = np.zeros(2)

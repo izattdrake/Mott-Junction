@@ -4,40 +4,39 @@ import matplotlib.pyplot as plt
 from Exact.exact_dimer import ExactDimer
 from Coupled.coupled_dimer import CoupledDimer
 from Decoupled.decoupled_dimer import DecoupledDimer
-    
+
+from Utility.plotting import save_axes_centered
+
 def spectral_by_hand(freqs, U, t, eta=1e-2):
     None
     
-if __name__ == '__main__':
-    epsilon, t, beta, l_max = 0.0, 1.0, 4.0, 15
-    U_vals = np.linspace(0, 1, 5)
+if __name__ == "__main__":
+    epsilon, t, l_max = 0.0, 1.0, 20
     delta=0.05
-    x = np.linspace(-6, 6, 1000, dtype=complex)
+    x = np.linspace(-5, 5, 1000, dtype=complex)
     z = x + 1j*delta
 
-    U = 2.5
+    U = -1.0
 
     exact_dimer = ExactDimer(epsilon, U, t, mu=U/2)
-    coupled_dimer = CoupledDimer(epsilon, U, t, beta, l_max)
-    decoupled_dimer = DecoupledDimer(epsilon, U, t, beta, l_max)
+    coupled_dimer = CoupledDimer(epsilon, U, t, l_max, print_cache_results=True)
+    decoupled_dimer = DecoupledDimer(epsilon, U, t, l_max, print_cache_results=True)
 
-    gf_exact = exact_dimer.get_spectral_vec(x, site=0, imag_delta=delta, beta=beta)
-    gf_c = coupled_dimer.get_spectral(x, delta=delta)
-    gf_dc = decoupled_dimer.get_spectral(x, delta=delta)
-
-    print(f'Coupled GF Sum: {coupled_dimer.check_gf_sum()}')
-    print(f'Decoupled GF Sum: {decoupled_dimer.check_gf_sum()}')
+    gf_exact = exact_dimer.get_spectral_vec(x, imag_delta=delta)[:,0]
+    gf_c = coupled_dimer.get_spectral_vec(x, imag_delta=delta)[:,0]
+    gf_dc = decoupled_dimer.get_spectral_vec(x, imag_delta=delta)[:,0]
     
-    plt.figure(figsize=(6, 4))
+    fig, ax = plt.subplots(figsize=(6.5, 4.2))
+    
+    ax.plot(x, gf_exact, label="Exact", color="black")
+    ax.plot(x, gf_c, label="Coupled", color="dodgerblue")
+    ax.plot(x, gf_dc, label="Decoupled", color="tomato")
 
-    plt.plot(x, gf_exact, label='Exact', color='black')
-    plt.plot(x, gf_c, label='Coupled SR', color='#3776ab')
-    plt.plot(x, gf_dc, label='Decoupled SR', color='orange', linestyle='--')
+    ax.set_xlabel(r"$\omega$")
+    ax.set_ylabel(r"$\rho_{11}(\omega)$")
+    ax.set_xlim(-5, 5)
+    ax.grid(True, alpha=0.3, linewidth=0.6)
+    ax.legend(handlelength=2.2, labelspacing=0.35, borderaxespad=-0.25)
 
-    plt.xlabel(r'$\omega$')
-    plt.ylabel(r'$\rho_{11}(\omega)$')
-    plt.title(r'Spectral Function $\rho_{11}(\omega)$')
-
-    plt.grid(True, alpha=0.3)
-    plt.legend()
+    save_axes_centered(fig, ax, f"Dimer/spectral_U{U}_l{l_max}_delta{delta}.pdf")
     plt.show()

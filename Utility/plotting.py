@@ -1,165 +1,68 @@
 import numpy as np
+import matplotlib as mpl
 import matplotlib.pyplot as plt
-
-from mpl_toolkits.mplot3d import Axes3D
-from exact_dimer import get_phys_basis, get_def_particle_basis, get_H
-from utility.helpers import *
-
-"""
-This is the main file used for processing of exact, effective, and MF dimer solutions, calculating their spectra, and plotting data
-Logic behind exact and MF theories in the other files
-"""
-
-
-"""
-    Function that plots rotor ground states
-    Used to study the weights around physical values of |l>
-    and the dropoff towards l_max 
-"""
-def plot_rotor_weight(rotor_state, l_max):
-    # Construct l values
-    l_vals = np.arange(-l_max, l_max + 1)
-
-    # Plot
-    plt.figure()
-    plt.plot(l_vals, rotor_state, marker='o')
-    plt.xlabel("l")
-    plt.ylabel("Weight")
-    plt.title("Rotor Ground State Weights: $\ell_{max}=$" + f'{l_max}')
-    plt.grid(True)
-    plt.show()
-
-def plot_1D(x_vals, y_vals, title=None, x_label=None, y_label=None):
-    plt.figure(figsize=(8, 5))
-    plt.plot(x_vals, y_vals, linewidth=2)
-    plt.title(title, fontsize=14)
-    plt.xlabel(x_label), plt.ylabel(y_label)
-    plt.grid(True, linestyle="--", alpha=0.6)
-    plt.tight_layout()
-    plt.show()
-
-def plot_rotor_pair_weight(rotor_vector, l_max):
+from matplotlib.transforms import Bbox 
+ 
+# ----------------------------------------------------------------------
+# LaTeX-friendly style
+# ----------------------------------------------------------------------
+# Set USE_TEX = True to typeset every label with your actual LaTeX install
+# (perfect font match with the document). Requires latex + dvipng + cm-super
+# on your PATH. If that's not available, False uses matplotlib's bundled
+# Computer Modern, which is very close.
+USE_TEX = False
+ 
+mpl.rcParams.update({
+    "text.usetex": USE_TEX,
+    "font.family": "serif",
+    "font.serif": ["cmr10", "Computer Modern Roman", "DejaVu Serif"],
+    "mathtext.fontset": "cm",
+    "axes.formatter.use_mathtext": True,
+    "axes.unicode_minus": False,      # cmr10 has no unicode minus glyph
+ 
+    # Sizes are in points and land in the PDF at these *absolute* sizes,
+    # so pick figsize below to equal the final width in the document and
+    # include it at that width (no \includegraphics scaling).
+    "axes.labelsize": 18,
+    "axes.titlesize": 18,
+    "xtick.labelsize": 15,
+    "ytick.labelsize": 15,
+    "legend.fontsize": 14,
+ 
+    "lines.linewidth": 2.0,
+    "axes.linewidth": 0.9,
+    "legend.frameon": False,
+    "xtick.direction": "in",
+    "ytick.direction": "in",
+    "xtick.top": True,
+    "ytick.right": True,
+    "xtick.major.size": 5,
+    "ytick.major.size": 5,
+    "xtick.minor.size": 2.5,
+    "ytick.minor.size": 2.5,
+ 
+    "pdf.fonttype": 42,               # embed real fonts, not Type-3
+    "ps.fonttype": 42,
+})
+ 
+ 
+def save_axes_centered(fig, ax, filename, pad=0.03):
+    """Save so that the *plot box* sits at the center of the image.
+ 
+    A normal bbox_inches='tight' crop hugs the labels, so the y-label makes
+    the left margin wider than the right and \\centering in LaTeX ends up
+    centering the labels, not the data. This pads the short side instead,
+    making the saved bounding box symmetric about the axes center.
     """
-    Plot rotor vector coefficients in the |ℓ₁ℓ₂⟩ two-rotor basis.
-
-    Parameters
-    ----------
-    rotor_vector : 1D array of length (2*l_max+1)**2
-        The coefficients ⟨ℓ₁ℓ₂|ψ⟩, indexed by
-        index = (ℓ₁ + l_max) * (2*l_max + 1) + (ℓ₂ + l_max).
-    l_max : int
-        Maximum angular momentum quantum number.
-    """
-    l_vals = np.arange(-l_max, l_max + 1)
-    n = 2 * l_max + 1
-
-    fig = plt.figure(figsize=(10, 7))
-    ax = fig.add_subplot(111, projection='3d')
-
-    dx = dy = 0.6
-    x, y, dz = [], [], []
-
-    for i, l1 in enumerate(l_vals):
-        for j, l2 in enumerate(l_vals):
-            idx = i * n + j
-            x.append(l1 - dx / 2)
-            y.append(l2 - dy / 2)
-            dz.append(rotor_vector[idx])
-
-    x, y, dz = np.array(x), np.array(y), np.array(dz)
-    z = np.zeros_like(dz)
-
-    colors = plt.cm.viridis((dz - dz.min()) / (dz.max() - dz.min() + 1e-12))
-
-    ax.bar3d(x, y, z, dx, dy, dz, color=colors, shade=True, alpha=0.85)
-
-    ax.set_xlabel(r'$\ell_1$', fontsize=13)
-    ax.set_ylabel(r'$\ell_2$', fontsize=13)
-    ax.set_zlabel('Weight', fontsize=13)
-    ax.set_title(
-        r'Rotor Weights: $|\ell_1 \ell_2\rangle$ basis, $\ell_{\max}=$' + f'{l_max}',
-        fontsize=13
-    )
-    ax.set_xticks(l_vals)
-    ax.set_yticks(l_vals)
-
-    plt.tight_layout()
-    plt.show()
-
-"""
-Plots energies as a function of J=U/t
-Energies is of type list[list,...] where each list inside is the spectrum for a value of U/t
-"""
-def plot_spectrum(energies, J_vals):
-    plt.figure()
-
-    for J, E_list in zip(J_vals, energies):
-        plt.scatter([J]*len(E_list), E_list, 
-                    marker='D',   
-                    edgecolors='blue',  
-                    facecolors='white',  
-                    linewidths=1.0       
-                    )
-
-    plt.xlabel("U/t")
-    plt.ylabel("Energies")
-    plt.title("Energy Spectrum vs U/t")
-    plt.grid(True)
-
-    plt.show()
-
-"""
-    Plots the dimer spectrum across entire Fock space
-    Allows for selecting which particle number subspaces to plot 
-"""
-def plot_def_number_spectrum(epsilon, t, J_vals, PLOT_P0=False, PLOT_P1=False, PLOT_P2=False, PLOT_P3=False, PLOT_P4=False, PLOT_EFF=False, EFF_ENERGIES=None):
-
-    bases = [get_def_particle_basis(0), get_def_particle_basis(1), get_def_particle_basis(2), get_def_particle_basis(3), get_def_particle_basis(4)]
-    energies = [[], [], [], [], []]
-
-    for i in range(len(energies)):
-        basis = bases[i]
-        for J in J_vals:
-            H = get_H(epsilon, J, t, basis)
-
-            eigenvals, _ = np.linalg.eigh(H)
-
-            energies[i].append(eigenvals)
-
-    plt.figure()
-
-    shapes = ['D', 'o', 's', '^', 'v', 'p']
-    colors = ['blue', 'purple', 'green', 'red', 'gold', 'black']
-    labels = ['N=0', 'N=1', 'N=2', 'N=3', 'N=4', 'EFF']
-
-    datasets = []
-    print(f'energies[0]: {energies[0]}')
-    print(f'length: {len(energies[0])}')
-    if PLOT_P0:
-        datasets.append((energies[0], shapes[0], colors[0], labels[0]))
-    if PLOT_P1:
-        datasets.append((energies[1], shapes[1], colors[1], labels[1]))
-    if PLOT_P2:
-        datasets.append((energies[2], shapes[2], colors[2], labels[2]))
-    if PLOT_P3:
-        datasets.append((energies[3], shapes[3], colors[3], labels[3]))
-    if PLOT_P4:
-        datasets.append((energies[4], shapes[4], colors[4], labels[4]))
-    if PLOT_EFF:
-        datasets.append((EFF_ENERGIES, shapes[5], colors[5], labels[5]))
-
-    for E_data, marker, color, label in datasets:
-        x, y = [], []
-        for J, E_list in zip(J_vals, E_data):
-            x.extend([J]*len(E_list))
-            y.extend(E_list)
-        plt.scatter(x, y, marker=marker, edgecolors=color, facecolors='white', linewidths=0.8, label=label, s=60)
-
-    plt.xlabel('U/t')
-    plt.ylabel('Energies')
-    plt.title('Energy Spectrum vs U/t')
-    plt.legend()
-    plt.grid(True)
-    plt.show()
-
-
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    tight = fig.get_tightbbox(renderer)                                 # inches
+    axbb = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+ 
+    cx = 0.5 * (axbb.x0 + axbb.x1)
+    cy = 0.5 * (axbb.y0 + axbb.y1)
+    hw = max(cx - tight.x0, tight.x1 - cx) + pad
+    hh = max(cy - tight.y0, tight.y1 - cy) + pad
+ 
+    bbox = Bbox.from_extents(cx - hw, cy - hh, cx + hw, cy + hh)
+    fig.savefig(f"Figures/{filename}", bbox_inches=bbox, pad_inches=0.0)
