@@ -8,6 +8,6 @@ eff_dimer_inhom_dump.py
 Dimer/Exact/test.py
 D1/SingleSite/_cache
 D1/ClusterSite/_cache
-Dimer/Couopled/_cache
+Dimer/Coupled/_cache
 Dimer/Decouopled/_cache
 Figures
