@@ -90,7 +90,7 @@ class DecoupledDimer:
             self._evals_rotor_vec, self._evecs_rotor_vec = get_rotor_eig_vec(self._U, self._h_vec, self._K_vec, self._l_max)
 
             if print_cache_results:
-                print(f"DecoupledDimer.__init__: Cache hit: {cache.path(params).name}")
+                print(f"{self.__class__.__name__}.__init__: Cache hit: {cache.path(params).name}")
         else:
             # Failure to hit; default attempt params before nearest params check
             h_vec_guess = -self._epsilon_vec
@@ -103,7 +103,7 @@ class DecoupledDimer:
 
             # Search for nearest params 
             if use_cache and try_nearest_params:
-                near = cache.nearest(params, self._NEAREST_NAMES, must_match=("N"))
+                near = cache.nearest(params, self._NEAREST_NAMES, must_match=("N", "Q", "epsilon"))
                 if near is not None and near["distance"] <= nearest_params_max_dist:
                     near_data = near["data"]
 
@@ -115,9 +115,10 @@ class DecoupledDimer:
                     self._cache_status = "NEAREST"
 
                     if print_cache_results:
-                        print(f"DecoupledDimer.__init__: Nearest start from "
+                        print(f"{self.__class__.__name__}.__init__: Nearest start from "
                               f"{near['params']} (dist = {near['distance']:.3f})")
- 
+                else:
+                    print(f"{self.__class__.__name__}.__init__: Printing with default params")
             if iteration_method == 0: # Iteration w/ modified Broyden's method 
                 (
                     self._evals_spinon, self._evecs_spinon, self._evals_rotor_vec, 

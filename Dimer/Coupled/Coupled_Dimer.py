@@ -84,7 +84,7 @@ class CoupledDimer:
             self._evals_rotor, self._evecs_rotor   = np.linalg.eigh(get_H_rotor(self._U, self._h_vec, self._J_eff, self._l_max))
 
             if print_cache_results:
-                print(f"CoupledDimer.__init__: Cache hit: {cache.path(params).name}")
+                print(f"{self.__class__.__name__}.__init__: Cache hit: {cache.path(params).name}")
         else:
             # Failure to hit; default attempt params before nearest params check
             h_vec_guess = -self._epsilon_vec
@@ -95,7 +95,7 @@ class CoupledDimer:
 
             # Search for nearest params
             if use_cache and try_nearest_params:
-                near = cache.nearest(params, self._NEAREST_NAMES, must_match=("N"))
+                near = cache.nearest(params, self._NEAREST_NAMES, must_match=("N", "epsilon"))
                 if near is not None and near["distance"] <= nearest_params_max_dist:
                     near_data = near["data"]
 
@@ -106,7 +106,7 @@ class CoupledDimer:
                     self._cache_status = "NEAREST"
 
                     if print_cache_results:
-                        print(f"CoupledDimer.__init__: Nearest start from "
+                        print(f"{self.__class__.__name__}.__init__: Nearest start from "
                               f"{near['params']} (dist = {near['distance']:.3f})")
  
             if iteration_method == 0: # Modified Broyden"s method 
@@ -352,11 +352,14 @@ class CoupledDimer:
 
         return E_proj
 
-    def rotor_gs(self, theta_vals, site=0):
-        """Calculates rotor ground state output in the exp(i l theta) basis"""
-        l_vals = np.arange(-self._l_max, self._l_max+1)
-        evec_rotor_gs = self._evecs_rotor_vec[site][:,0]
-        
+    def rotor_gs(self, theta1_vals, theta2_vals, site=0):
+        """Calculates rotor ground-state output in the exp(i l theta) basis.
+        This is a 2D function for the coupled dimer Psi(theta1, theta2)."""
+        evec_rotor_gs = self._evecs_rotor[site][:,0]
+
+        l1 = np.repeat(np.arange(-self._l_max, self._l_max+1), self._dim)
+        l2 = np.tile(np.arange(-self._l_max, self._l_max+1), self._dim)
+
         output = []
         for i in range(len(theta_vals)):
             val = np.abs(evec_rotor_gs @ np.exp(1j * l_vals * theta_vals[i])) / np.sqrt(2*np.pi)

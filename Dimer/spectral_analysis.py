@@ -11,16 +11,17 @@ def spectral_by_hand(freqs, U, t, eta=1e-2):
     None
     
 if __name__ == "__main__":
-    epsilon, t, l_max = 0.0, 1.0, 20
+    epsilon, t, l_max = 0.5, 1.0, 15
     delta=0.05
     x = np.linspace(-5, 5, 1000, dtype=complex)
     z = x + 1j*delta
 
-    U = -1.0
+    U = 0.04
 
     exact_dimer = ExactDimer(epsilon, U, t, mu=U/2)
-    coupled_dimer = CoupledDimer(epsilon, U, t, l_max, print_cache_results=True)
     decoupled_dimer = DecoupledDimer(epsilon, U, t, l_max, print_cache_results=True)
+    print("here")
+    coupled_dimer = CoupledDimer(epsilon, U, t, l_max, print_cache_results=True, nearest_params_max_dist=False)
 
     gf_exact = exact_dimer.get_spectral_vec(x, imag_delta=delta)[:,0]
     gf_c = coupled_dimer.get_spectral_vec(x, imag_delta=delta)[:,0]
@@ -36,7 +37,7 @@ if __name__ == "__main__":
     ax.set_ylabel(r"$\rho_{11}(\omega)$")
     ax.set_xlim(-5, 5)
     ax.grid(True, alpha=0.3, linewidth=0.6)
-    ax.legend(handlelength=2.2, labelspacing=0.35, borderaxespad=-0.25)
+    ax.legend(handlelength=2.2, labelspacing=0.35, borderaxespad=0.2)
 
-    save_axes_centered(fig, ax, f"Dimer/spectral_U{U}_l{l_max}_delta{delta}.pdf")
+    save_axes_centered(fig, ax, f"Dimer/spectral_epsilon{epsilon}_U{U}_l{l_max}_delta{delta}.pdf")
     plt.show()

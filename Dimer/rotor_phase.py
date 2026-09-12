@@ -24,7 +24,7 @@ if __name__ == "__main__":
     fig, ax = plt.subplots(figsize=(6.5, 4.2))
   
     for i in range(len(U_vals)):
-        ax.plot(theta_vals, output_vals[:,i], label=f"U={U_vals[i]}")
+        ax.plot(theta_vals, output_vals[:,i])
   
     ax.set_xlabel(r"$\theta$")
     ax.set_ylabel(r"$\Psi_0(\theta)$")

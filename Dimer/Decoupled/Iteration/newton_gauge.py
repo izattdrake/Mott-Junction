@@ -132,7 +132,7 @@ def iterate_newton_gauge(epsilon_vec, t_mat, U, t_eff_mat_guess, h_vec_guess, Z_
         count += 1
 
     if not did_converge:
-        print(f'decoupled_gauge_params | ERROR: Did not converge after {MAX_ITER} iterations.')
+        print(f'ERROR: DID NOT CONVERGE AFTER {MAX_ITER} ITERATIONS')
         sys.exit()
 
     # Calculate nf, L with final Hamiltonians before return
