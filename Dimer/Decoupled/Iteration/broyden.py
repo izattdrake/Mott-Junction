@@ -5,11 +5,14 @@ import sys
 from ..core import (
     get_H_spinon,
     get_nf_vec,
+    get_occupations,
+    get_rho,
     get_rotor_eig_vec,
     get_L_vec,
     get_Z_vec,
     get_K_vec,
-    get_t_eff
+    get_t_eff,
+    get_residual
 )
 
 # ====================================================================
@@ -28,23 +31,23 @@ from ..core import (
 #   correct. 
 # ====================================================================
 
-MAX_ITER = 1e7
+MAX_ITER    = 1e9
 
-ALPHA_H = 5e-3
-ALPHA_Z = 5e-3
-ALPHA_K = 5e-3
+ALPHA_H     = 5e-3
+ALPHA_Z     = 5e-3
+ALPHA_K     = 5e-3
 ALPHA_T_EFF = 5e-3
-ALPHA_MU = 5e-3
+ALPHA_MU    = 1e-4
 
-TOL_H = 1e-10
-TOL_T_EFF = 1e-10
-TOL_Z = 1e-10
-TOL_K = 1e-10
-TOL_N = 1e-6
-TOL_F = 1e-10
+TOL_H       = 1e-9
+TOL_T_EFF   = 1e-9
+TOL_Z       = 1e-9
+TOL_K       = 1e-9
+TOL_N       = 1e-6
+TOL_F       = 1e-9
 
-WEIGHT = 1e-2
-MEMORY = 8
+WEIGHT     = 1e-2
+NORM_FLOOR = 1e-13
 
 def modified_broyden_step(f_vec, h_vec, alpha, weight, 
                           dF_hist, u_hist, h_prev, f_prev):
@@ -58,7 +61,7 @@ def modified_broyden_step(f_vec, h_vec, alpha, weight,
  
     dF = f_vec - f_prev
     norm = np.linalg.norm(dF)
-    if norm < 1e-64:
+    if norm < NORM_FLOOR:
         return alpha * f_vec
  
     dF_hat = dF / norm
@@ -68,78 +71,78 @@ def modified_broyden_step(f_vec, h_vec, alpha, weight,
  
     m = len(dF_hist)
     DF = np.array(dF_hist)                        
-    a = DF @ DF.T  # transition matrix <dFhat_k|dFhat_l>
+    a = DF @ DF.T                                        # transition matrix <dFhat_k|dFhat_l>
     beta_mat = np.linalg.inv(weight**2 * np.eye(m) + a)
-    c = DF @ f_vec                                 # c_k = <dFhat_k|f>
+    c = DF @ f_vec                                       # c_k = <dFhat_k|f>
     gamma = beta_mat @ c
  
     return alpha * f_vec - np.array(u_hist).T @ gamma
 
-def iterate_broyden(epsilon_vec, t_mat, U, t_eff_mat_guess, h_vec_guess, Z_vec_guess, K_vec_guess, beta, l_max, N_target=2, N_at=2):
+def iterate_broyden(epsilon_vec, t, U, t_eff_guess, h_vec_guess, Z_vec_guess, K_vec_guess,
+                    beta, l_max, N_target=2, memory=8):
     """Calculate self-consistent parameters w/ modified Broyden's method"""
-    mu = 0.0 # Global chemical potential
-
-    dF_hist = []
-    u_hist = []
-    h_prev = None
-    f_prev = None
+    dF_hist, u_hist = [], []
+    h_prev = f_prev = None
 
     did_converge = False
     count = 1
 
-    h_vec_update, Z_vec_update, K_vec_update, t_eff_mat_update = h_vec_guess, Z_vec_guess, K_vec_guess, t_eff_mat_guess
+    h_vec_update, Z_vec_update, K_vec_update, t_eff_update = h_vec_guess, Z_vec_guess, K_vec_guess, t_eff_guess
 
     while not did_converge and count < MAX_ITER:
-        h_vec, Z_vec, K_vec, t_eff_mat = h_vec_update, Z_vec_update, K_vec_update, t_eff_mat_update
+        h_vec, Z_vec, K_vec, t_eff = h_vec_update, Z_vec_update, K_vec_update, t_eff_update
         
-        evals_spinon, evecs_spinon = np.linalg.eigh(get_H_spinon(epsilon_vec, t_eff_mat, h_vec, mu))
-        evals_rotor_vec, evecs_rotor_vec = get_rotor_eig_vec(U, h_vec, K_vec, l_max)
+        # Spinon sector
+        evals_spinon, evecs_spinon = np.linalg.eigh(get_H_spinon(epsilon_vec, t_eff, h_vec))
+        occ, mu = get_occupations(evals_spinon, N_target, beta)
+        nf_vec = get_nf_vec(evecs_spinon, occ)
+        rho = get_rho(evecs_spinon, occ)
 
-        # Calculate nf and L for Jacobian
-        nf_vec = get_nf_vec(evals_spinon, evecs_spinon, beta, N_at)
+        # Rotor sector
+        evals_rotor_vec, evecs_rotor_vec = get_rotor_eig_vec(U, h_vec, K_vec, l_max)
         L_vec = get_L_vec(evals_rotor_vec, evecs_rotor_vec, beta, l_max)
 
-        f_vec = nf_vec - L_vec - N_at / 2.0
+        # Constraint & modified Broyden step
+        f_vec = get_residual(nf_vec, L_vec)
         delta_h = modified_broyden_step(f_vec, h_vec, ALPHA_H, WEIGHT, dF_hist, u_hist, h_prev, f_prev)
         
-        if len(dF_hist) > MEMORY:
+        if len(dF_hist) > memory:
             dF_hist.pop(0)
             u_hist.pop(0)
 
-        h_prev = h_vec.copy()
-        f_prev = f_vec.copy()
+        h_prev, f_prev = h_vec.copy(), f_vec.copy()
         h_vec_update = h_vec + delta_h
 
         # Update parameters
         Z_vec_update = (1.0 - ALPHA_Z) * Z_vec + ALPHA_Z * get_Z_vec(evals_rotor_vec, evecs_rotor_vec, beta)
-        K_vec_update = (1.0 - ALPHA_K) * K_vec + ALPHA_K * get_K_vec(t_mat, Z_vec, evals_spinon, evecs_spinon, beta, N_at)
-        t_eff_mat_update = (1 - ALPHA_T_EFF) * t_eff_mat + ALPHA_T_EFF * get_t_eff(t_mat, Z_vec)
-
-        # Adjust total particle number
-        N = np.sum(nf_vec)
-        mu += ALPHA_MU * (N_target - N)
+        K_vec_update = (1.0 - ALPHA_K) * K_vec + ALPHA_K * get_K_vec(t, Z_vec, rho)
+        t_eff_update = (1.0 - ALPHA_T_EFF) * t_eff + ALPHA_T_EFF * get_t_eff(t, Z_vec)
 
         # Test convergence of all parameters within selected bounds
         did_converge = (
             np.allclose(h_vec_update, h_vec, atol=TOL_H) and
-            np.allclose(t_eff_mat_update, t_eff_mat, atol=TOL_T_EFF) and
+            np.allclose(t_eff_update, t_eff, atol=TOL_T_EFF) and
             np.allclose(Z_vec_update, Z_vec, atol=TOL_Z) and
             np.allclose(K_vec_update, K_vec, atol=TOL_K) and
-            np.allclose(N, N_target, atol=TOL_N) and
             np.linalg.norm(f_vec) < TOL_F
         )
 
         count += 1
 
     if not did_converge:
-        print(f'ERROR: DID NOT CONVERGE AFTER {MAX_ITER} ITERATIONS')
+        raise RuntimeError(f"Broyden did not converge after {MAX_ITER} iterations.")
         sys.exit()
 
-    # Calculate nf, L with final Hamiltonians before return
-    evals_spinon, evecs_spinon = np.linalg.eigh(get_H_spinon(epsilon_vec, t_eff_mat_update, h_vec_update, mu))
-    evals_rotor_vec, evecs_rotor_vec = get_rotor_eig_vec(U, h_vec_update, K_vec_update, l_max)
+    """Final evaluation of converged parameters"""
+    # Spinon sector
+    evals_spinon, evecs_spinon = np.linalg.eigh(get_H_spinon(epsilon_vec, t_eff_update, h_vec_update))
+    occ, mu = get_occupations(evals_spinon, N_target, beta)
+    nf_vec = get_nf_vec(evecs_spinon, occ)
 
-    nf_vec = get_nf_vec(evals_spinon, evecs_spinon, beta, N_at)
+    # Rotor sector
+    evals_rotor_vec, evecs_rotor_vec = get_rotor_eig_vec(U, h_vec_update, K_vec_update, l_max)
     L_vec = get_L_vec(evals_rotor_vec, evecs_rotor_vec, beta, l_max)
 
-    return evals_spinon, evecs_spinon, evals_rotor_vec, evecs_rotor_vec, h_vec_update, Z_vec_update, K_vec_update, t_eff_mat, nf_vec, L_vec, mu, count
+    return (evals_spinon, evecs_spinon, evals_rotor_vec, evecs_rotor_vec, 
+            h_vec_update, Z_vec_update, K_vec_update, t_eff, 
+            nf_vec, L_vec, mu, occ, rho, count)
