@@ -5,7 +5,7 @@ from Decoupled.decoupled_dimer import DecoupledDimer
 from Utility.plotting import save_axes_centered
 
 if __name__ == "__main__":
-    epsilon, t, beta, l_max = 0.0, 1.0, None, 20
+    epsilon, t, beta, l_max = 0.0, 1.0, None, 15
     U_vals = np.array([0.04, 0.5, 1.0, 2.0, 3.0,3.9, 4.0, 4.01])
 
     theta_vals = np.linspace(0, 2*np.pi, 200)

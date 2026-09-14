@@ -26,18 +26,18 @@ from ..core import (
 #   accurate. 
 # ====================================================================
  
-MAX_ITER = 1e7
+MAX_ITER = 1e9
 
-ALPHA_H = 1e-3
-ALPHA_T_EFF = 1e-3
-ALPHA_J_EFF = 1e-3
-ALPHA_MU = 1e-3
+ALPHA_H = 5e-3
+ALPHA_T_EFF = 5e-3
+ALPHA_J_EFF = 5e-3
+ALPHA_MU = 5e-3
 
-TOL_H = 1e-10
-TOL_T_EFF = 1e-10
-TOL_J_EFF = 1e-10
+TOL_H = 1e-9
+TOL_T_EFF = 1e-9
+TOL_J_EFF = 1e-9
 TOL_N  = 1e-6
-TOL_F = 1e-10
+TOL_F = 1e-9
 
 # Modified-Broyden control parameters
 WEIGHT = 1e-2

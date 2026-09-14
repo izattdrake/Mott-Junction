@@ -108,7 +108,10 @@ class CoupledDimer:
                     if print_cache_results:
                         print(f"{self.__class__.__name__}.__init__: Nearest start from "
                               f"{near['params']} (dist = {near['distance']:.3f})")
- 
+            else:
+                if print_cache_results:
+                    print(f"{self.__class__.__name__}.__init__: Iterating with default params")
+
             if iteration_method == 0: # Modified Broyden"s method 
                 (
                     self._evals_spinon, self._evecs_spinon, self._evals_rotor,
@@ -351,6 +354,11 @@ class CoupledDimer:
             # E_proj -= self._mu_phys * self._N_target
 
         return E_proj
+
+    def charge_gap() -> float:
+        """Calculate the charge gap of the system from the 
+        spinon and rotor eigenvalues."""
+        None
 
     def rotor_gs(self, theta1_vals, theta2_vals, site=0):
         """Calculates rotor ground-state output in the exp(i l theta) basis.

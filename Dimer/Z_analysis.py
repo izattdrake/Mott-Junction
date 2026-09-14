@@ -5,6 +5,8 @@ from Exact.exact_dimer import ExactDimer
 from Coupled.coupled_dimer import CoupledDimer
 from Decoupled.decoupled_dimer import DecoupledDimer
 
+from Utility.plotting import save_axes_centered
+
 def Z_by_hand(U, t):
     Z = 1/(1 + (U/(6*t))**2)
     return Z
@@ -12,31 +14,31 @@ def Z_by_hand(U, t):
 if __name__ == '__main__':
     epsilon, t, beta, l_max = 0.0, 1.0, None, 15
 
-    U_vals = np.linspace(0.02, 4.0, 20)
+    U_vals = np.linspace(0.04, 5.0, 50)
     
-    exact_Z, c_Z, dc_Z = [], [], []
-    count = 1
+    Z_exact, Z_c, Z_dc = [], [], []
 
     for U in U_vals:
         exact_dimer = ExactDimer(epsilon, U, t, mu=U/2) 
         c_dimer = CoupledDimer(epsilon, U, t, l_max, print_cache_results=True)
         dc_dimer = DecoupledDimer(epsilon, U, t, l_max, print_cache_results=True)
 
-        exact_Z.append(exact_dimer.get_qp_vec()[0])
-        c_Z.append(c_dimer.get_qp_vec()[0])
-        dc_Z.append(dc_dimer.get_Z_vec()[0])
+        Z_exact.append(exact_dimer.get_qp_vec()[0])
+        Z_c.append(c_dimer.get_qp_vec()[0])
+        Z_dc.append(dc_dimer.get_Z_vec()[0])
 
-        print(count); count += 1
+    fig, ax = plt.subplots(figsize=(6.5, 4.2))
 
-    plt.figure(figsize=(6, 4))
-    plt.plot(U_vals, exact_Z, color='black', label='Exact')
-    plt.plot(U_vals, c_Z, color='dodgerblue', label='Coupled')
-    plt.plot(U_vals, dc_Z, color='tomato', label='Decoupled')
+    ax.plot(U_vals, Z_exact, color='black', label='Exact')
+    ax.plot(U_vals, Z_c, color='dodgerblue', label='Coupled')
+    ax.plot(U_vals, Z_dc, color='tomato', label='Decoupled')
 
-    plt.xlabel(r'$U$')
-    plt.ylabel(r'Quasiparticle spectral weight')
-    plt.title('Quasiparticle coherence')
-    plt.grid(True, alpha=0.3)
-    plt.ylim(bottom=0)
-    plt.legend()
+    ax.set_xlabel(r'$U/t$')
+    ax.set_ylabel(r'Z')
+    ax.set_xlim(0, 5.0)
+
+    ax.grid(True, alpha=0.3, linewidth=0.6)
+    ax.legend(handlelength=2.2, labelspacing=0.35, borderaxespad=0.2)
+    save_axes_centered(fig, ax, f"Dimer/Z_analysis_beta{beta}_lmax{l_max}.pdf")    
+
     plt.show()
