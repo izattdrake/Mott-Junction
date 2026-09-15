@@ -47,8 +47,8 @@ class CoupledDimer:
 
     """Names of the converged quantities in iteration methods" return order.
     Parameter guesses looked for in nearest parameter lookup, needed for calling fresh iteration"""
-    _ITERATION_NAMES = ("h_vec", "t_eff", "J_eff", "nf_vec", "L_vec", "mu", "count")
-    _NEAREST_NAMES = ("h_vec", "t_eff", "J_eff")
+    _ITERATION_NAMES = ("h_vec", "t_eff", "J_eff", "nf_vec", "L_vec", "L2_vec", "mu", "occ", "rho", "count")
+    _NEAREST_NAMES = ("h_vec", "t_eff")
 
     def __init__(self, epsilon: float, U: float, t: float, l_max: int, beta: Union[None, float]=None, N_target: int=2, iteration_method: int=0,
                  use_cache: bool=True, cache_dir: str=None, try_nearest_params: bool=True, nearest_params_max_dist: float=0.5, 
@@ -73,14 +73,19 @@ class CoupledDimer:
             self._h_vec        = np.asarray(data["h_vec"], float).copy()
             self._nf_vec       = np.asarray(data["nf_vec"], float).copy()
             self._L_vec        = np.asarray(data["L_vec"], float).copy()
+            self._L2_vec       = np.asarray(data["L2_vec"], float).copy()
 
             self._t_eff        = float(data["t_eff"])
+
             self._J_eff        = float(data["J_eff"])
             self._mu           = float(data["mu"])
+            
+            self._rho          = np.asarray(data["rho"], float).copy()
+            self._occ          = np.asarray(data["occ"], float).copy()
             self._count        = int(data["count"])
 
             # Rebuild and solve for eigenspace solutions of spinon & rotor Hamiltonians; saves disk space
-            self._evals_spinon, self._evecs_spinon = np.linalg.eigh(get_H_spinon(self._epsilon_vec, self._h_vec, self._t_eff, self._mu))
+            self._evals_spinon, self._evecs_spinon = np.linalg.eigh(get_H_spinon(self._epsilon_vec, self._h_vec, self._t_eff))
             self._evals_rotor, self._evecs_rotor   = np.linalg.eigh(get_H_rotor(self._U, self._h_vec, self._J_eff, self._l_max))
 
             if print_cache_results:
@@ -88,8 +93,7 @@ class CoupledDimer:
         else:
             # Failure to hit; default attempt params before nearest params check
             h_vec_guess = -self._epsilon_vec
-            t_eff_guess = 0.8 * t
-            J_eff_guess = 0.8 * t
+            t_eff_guess = 0.9 * t
 
             self._cache_status = "MISS"
 
@@ -101,7 +105,6 @@ class CoupledDimer:
 
                     h_vec_guess = np.asarray(near_data["h_vec"], float).copy()
                     t_eff_guess = float(near_data["t_eff"])
-                    J_eff_guess = float(near_data["J_eff"])
 
                     self._cache_status = "NEAREST"
 
@@ -116,34 +119,15 @@ class CoupledDimer:
                 (
                     self._evals_spinon, self._evecs_spinon, self._evals_rotor,
                     self._evecs_rotor, self._h_vec, self._t_eff, self._J_eff,
-                    self._nf_vec, self._L_vec, self._mu, self._count
+                    self._nf_vec, self._L_vec, self._L2_vec, self._mu, 
+                    self._occ, self._rho, self._count
                 ) = iterate_broyden(
                     self._epsilon_vec, self._U, self._t, 
-                    h_vec_guess, t_eff_guess, J_eff_guess, 
-                    self._beta, self._l_max, self._N_target
-                )
-            elif iteration_method == 1: # Newton's method w/ gauge fix
-                (
-                    self._evals_spinon, self._evecs_spinon, self._evals_rotor,
-                    self._evecs_rotor, self._h_vec, self._t_eff, self._J_eff,
-                    self._nf_vec, self._L_vec, self._mu, self._count
-                ) = iterate_newton_gauge(
-                    self._epsilon_vec, self._U, self._t, 
-                    h_vec_guess, t_eff_guess, J_eff_guess, 
-                    self._beta, self._l_max, self._N_target
-                )
-            elif iteration_method == 2: # Newton's method w/o gauge fix
-                (
-                    self._evals_spinon, self._evecs_spinon, self._evals_rotor,
-                    self._evecs_rotor, self._h_vec, self._t_eff, self._J_eff,
-                    self._nf_vec, self._L_vec, self._mu, self._count
-                ) = iterate_newton_naive(
-                    self._epsilon_vec, self._U, self._t, 
-                    h_vec_guess, t_eff_guess, J_eff_guess, 
+                    h_vec_guess, t_eff_guess, 
                     self._beta, self._l_max, self._N_target
                 )
             else:
-                raise ValueError("Coupled_Dimer.__init__: ERROR: iteration argument")
+                raise ValueError(f"{self.__class__.__name__}.__init__: ERROR: iteration argument")
  
             if use_cache:
                 cache.save(params, {name: getattr(self, "_" + name) for name in self._ITERATION_NAMES})
@@ -355,25 +339,18 @@ class CoupledDimer:
 
         return E_proj
 
-    def charge_gap() -> float:
-        """Calculate the charge gap of the system from the 
-        spinon and rotor eigenvalues."""
-        None
+    def get_energy_MF(self):
+        """Variational mean-field energy for the coupled-rotor dimer:
 
-    def rotor_gs(self, theta1_vals, theta2_vals, site=0):
-        """Calculates rotor ground-state output in the exp(i l theta) basis.
-        This is a 2D function for the coupled dimer Psi(theta1, theta2)."""
-        evec_rotor_gs = self._evecs_rotor[site][:,0]
-
-        l1 = np.repeat(np.arange(-self._l_max, self._l_max+1), self._dim)
-        l2 = np.tile(np.arange(-self._l_max, self._l_max+1), self._dim)
-
-        output = []
-        for i in range(len(theta_vals)):
-            val = np.abs(evec_rotor_gs @ np.exp(1j * l_vals * theta_vals[i])) / np.sqrt(2*np.pi)
-            output.append(val)
-
-        return np.array(output)
+            E = sum_i eps_i n_i
+            - 2 N_spin t rho_12 Phi_12   (Phi_12 = <cos(theta_1 - theta_2)> = t_eff / t)
+            + U/2 sum_i <L_i^2>
+            + U/2 sum_i <L_i>       
+        """
+        E_site = float(np.dot(self._epsilon_vec, self._nf_vec))
+        E_hop = -2.0 * 2 * np.real(self._rho[0, 1]) * self._t_eff       
+        E_U = 0.5 * self._U * (np.sum(self._L2_vec) + np.sum(self._L_vec))
+        return E_site + E_hop + E_U
     
     def get_filling_vec(self) -> np.ndarray:
         """Get spinon/electron occupation at each lattice site."""

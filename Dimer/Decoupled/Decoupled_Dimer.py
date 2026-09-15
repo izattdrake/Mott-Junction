@@ -42,8 +42,8 @@ class DecoupledDimer:
 
     """Names of the converged quantities in iteration methods" return order.
     Parameter guesses looked for in nearest parameter lookup, needed for calling fresh iteration"""
-    _ITERATION_NAMES = ("h_vec", "Z_vec", "K_vec", "t_eff", "nf_vec", "L_vec", "mu", "occ", "rho", "count")
-    _NEAREST_NAMES = ("h_vec", "Z_vec", "K_vec", "t_eff")
+    _ITERATION_NAMES = ("h_vec", "Z_vec", "K_vec", "t_eff", "nf_vec", "L_vec", "L2_vec", "mu", "occ", "rho", "count")
+    _NEAREST_NAMES = ("h_vec", "Z_vec")
 
     def __init__(self, epsilon: float, U: float, t: float, l_max: int, beta: Union[None, float]=None, N_target=2, 
                  iteration_method=0, use_cache=True, cache_dir=None, try_nearest_params=True, nearest_params_max_dist=0.5,
@@ -54,7 +54,7 @@ class DecoupledDimer:
         retrieved parameters to save space."""
         self._epsilon_vec = np.array([-epsilon/2.0, epsilon/2.0]) # Even/opposite doping to preserve PHS, restricts chem. potential to U/2
         self._t = t
-        self._U, self._beta, self._l_max, self._N = U, beta, l_max, N_target
+        self._U, self._beta, self._l_max, self._N_target = U, beta, l_max, N_target
         self._dim = 2 * l_max + 1 # Dimension for one site
 
         cache = IterationCache(cache_dir if cache_dir is not None else self._CACHE_DIR,
@@ -74,6 +74,7 @@ class DecoupledDimer:
 
             self._nf_vec       = np.asarray(data["nf_vec"], float).copy()
             self._L_vec        = np.asarray(data["L_vec"], float).copy()
+            self._L2_vec       = np.asarray(data["L2_vec"], float).copy()
 
             self._mu           = float(data["mu"])
             self._occ          = np.asarray(data["occ"], float).copy()
@@ -90,8 +91,6 @@ class DecoupledDimer:
             # Failure to hit; default attempt params before nearest params check
             h_vec_guess = -self._epsilon_vec
             Z_vec_guess = np.full(2, 0.9)
-            K_vec_guess = np.full(2, -1.0)
-            t_eff_guess = 0.9 * self._t
 
             self._cache_status = "MISS"
             self._nearest_start_from = None
@@ -104,9 +103,6 @@ class DecoupledDimer:
 
                     h_vec_guess     = np.asarray(near_data["h_vec"], float).copy()
                     Z_vec_guess     = np.asarray(near_data["Z_vec"], float).copy()
-                    K_vec_guess     = np.asarray(near_data["K_vec"], float).copy()
-                    t_eff_guess     = float(near_data["t_eff"])
-
                     self._cache_status = "NEAREST"
 
                     if print_cache_results:
@@ -120,21 +116,11 @@ class DecoupledDimer:
                 (
                     self._evals_spinon, self._evecs_spinon, self._evals_rotor_vec, 
                     self._evecs_rotor_vec, self._h_vec, self._Z_vec, self._K_vec, 
-                    self._t_eff, self._nf_vec, self._L_vec, self._mu, self._occ, self._rho, self._count
+                    self._t_eff, self._nf_vec, self._L_vec, self._L2_vec, self._mu, 
+                    self._occ, self._rho, self._count
                 ) = iterate_broyden(
-                    self._epsilon_vec, self._t, self._U, t_eff_guess,
-                    h_vec_guess, Z_vec_guess, K_vec_guess, self._beta, self._l_max, self._N
-                )
-            elif iteration_method == 1: # Iteration w/ Newton's method w/ gauge fix
-                (
-                    self._evals_spinon, self._evecs_spinon, self._evals_rotor_vec,
-                    self._evecs_rotor_vec, self._h_vec, 
-                    self._Z_vec, self._K_vec, self._t_eff, self._nf_vec, self._L_vec, 
-                    self._mu, self._count
-                ) = iterate_newton_gauge(
-                    self._epsilon_vec, self._t, self._U, t_eff_guess, 
-                    h_vec_guess, Z_vec_guess, K_vec_guess, self._beta, self._l_max, 
-                    self._N
+                    self._epsilon_vec, self._U, self._t, h_vec_guess, Z_vec_guess, 
+                    self._beta, self._l_max, self._N_target
                 )
             else:
                 raise ValueError(f"{self.__class__.__name__}.__init__ | ERROR: ITERATION argument")
@@ -210,7 +196,7 @@ class DecoupledDimer:
 
         for spin in range(2):
             tun = c_cre[mode(0, spin)] @ c_ann[mode(1, spin)] # tunneling op. c^+_1 c_2
-            H += -self._t[0, 1] * (tun + tun.T)
+            H += -self._t * (tun + tun.T)
 
         evals_K, evecs_K = np.linalg.eigh(H - self.mu_phys * N_op)
         self._H_exact_cache = (H, N_op, evals_K, evecs_K)
@@ -253,7 +239,7 @@ class DecoupledDimer:
 
     def __E0(self):
         """Calculate MF zero-point energy | E_0 = -\sum_j K_j sqrt(Z_j)"""
-        return -np.sum(self._K_vec * np.sqrt(self._Z_vec))
+        return -np.sum(self._K_vec * np.sqrt(self._Z_vec) + self._h_vec)
     
     def __rotor_product(self):
         """Built the rotor product state from two sites |psi_1>|psi_2> with
@@ -313,9 +299,20 @@ class DecoupledDimer:
         """Calculate ground-state energy w/o physical subspace projection"""
         E0 = self.__E0()
         E_gs_spinon, E_gs_rotor_vec = self._evals_spinon[0], self._evals_rotor_vec[:,0]
-        E_gs = 2 * E_gs_spinon + np.sum(E_gs_rotor_vec) + E0
+        E_gs = self._N_target * E_gs_spinon + np.sum(E_gs_rotor_vec) + E0
         return E_gs
     
+    def get_energy_MF(self):
+        """Mean-field energy accounting for difference in particle number:
+            E = sum_i eps_i n_i
+            - 2 N_SPIN t rho_12 sqrt(Z_1 Z_2)
+            + U/2 sum_i <L_i^2>
+            + U/2 sum_i (n_i - 1)"""
+        E_site = np.sum(self._epsilon_vec * self._nf_vec)
+        E_hop = -2.0 * 2 * self._t * np.real(self._rho[0, 1]) * np.sqrt(self._Z_vec[0] * self._Z_vec[1])
+        E_U = 0.5 * self._U * np.sum(self._L2_vec) + 0.5 * self._U * np.sum(self._nf_vec - 1.0)
+        return E_site + E_hop + E_U
+
     def get_E_gs_proj(self, grand_canonical=False):
         """Calculate ground-state energy as the expected value of
         the MF ground state projected onto the physical subspace.

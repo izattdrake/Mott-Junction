@@ -120,13 +120,6 @@ def iterate_broyden(epsilon_vec, U: float, t_mat, h_vec_guess, t_eff_mat_guess, 
             np.linalg.norm(f_vec) < TOL_F
         )
         
-        did_converge = (
-            np.allclose(t_eff_mat_update, t_eff_mat, atol=TOL_T_EFF) and
-            np.allclose(J_eff_mat_update, J_eff_mat, atol=TOL_J_EFF) and
-            np.allclose(K_vec_update, K_vec, atol=TOL_K) and
-            np.allclose(N, N_target, atol=TOL_N) 
-        )
-
         print(count); count += 1
         print(h_vec_update)
         print(f"h: {np.allclose(h_vec_update, h_vec, atol=TOL_H)}")

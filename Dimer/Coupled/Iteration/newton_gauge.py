@@ -3,11 +3,16 @@ import sys
 
 from ..core import (
     get_H_spinon,
-    get_t_eff,
     get_nf_vec,
+    get_occupations,
+    get_rho,
+    get_t_eff,
     get_H_rotor,
-    get_J_eff,
     get_L_vec,
+    get_L2_vec,
+    get_J_eff,
+    get_residual,
+    get_rho,
     get_Jacobian
 )
 
@@ -33,6 +38,18 @@ from ..core import (
 #   arbitrarily parameters converge for arbitrarily high values of 
 #   U/t. 
 # ====================================================================
+
+MAX_ITER    = 1e7
+
+ALPHA_H     = 5e-3
+ALPHA_T_EFF = 5e-3
+ALPHA_J_EFF = 5e-3
+
+TOL_H       = 1e-9
+TOL_T_EFF   = 1e-9
+TOL_J_EFF   = 1e-9
+TOL_N       = 1e-6
+TOL_PHYS_F  = 1e-9
 
 def gauge_fixed_newton_step(jacobian, f):
     """
@@ -71,20 +88,6 @@ def gauge_projected_residual(f):
  
 def iterate_newton_gauge(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_guess, beta, l_max, N_target=2.0):
     """Calculate self-consistent parameters w/ Newton's method & gauge fix"""
-    MAX_ITER = 1e7
- 
-    ALPHA_H = 1e-3
-    ALPHA_T_EFF = 1e-3
-    ALPHA_J_EFF = 1e-3
-    ALPHA_MU = 1e-3
- 
-    TOL_H = 1e-10
-    TOL_T_EFF = 1e-10
-    TOL_J_EFF = 1e-10
-    TOL_N  = 1e-6
-    TOL_PHYS_F = 1e-10
- 
-    mu = 0.0 # Global chemical potential
     dh = 1e-5 # Finite difference step | 1e-5 most accurate w/ fewest steps
 
     did_converge = False
@@ -95,52 +98,55 @@ def iterate_newton_gauge(epsilon_vec, U, t, h_vec_guess, t_eff_guess, J_eff_gues
     while not did_converge and count < MAX_ITER:
         h_vec, t_eff, J_eff  = h_vec_update, t_eff_update, J_eff_update
  
-        evals_spinon, evecs_spinon = np.linalg.eigh(get_H_spinon(epsilon_vec, h_vec, t_eff, mu))
+        # Spinon sector
+        evals_spinon, evecs_spinon = np.linalg.eigh(get_H_spinon(epsilon_vec, h_vec, t_eff))
+        occ, mu = get_occupations(evals_spinon, N_target, beta)
+        nf_vec = get_nf_vec(evecs_spinon, occ)
+        rho = get_rho(evecs_spinon, occ)
+
+        # Rotor sector
         evals_rotor, evecs_rotor = np.linalg.eigh(get_H_rotor(U, h_vec, J_eff, l_max))
- 
-        nf_vec = get_nf_vec(evals_spinon, evecs_spinon, beta)
         L_vec = get_L_vec(evals_rotor, evecs_rotor, beta, l_max)
  
-        f_vec = nf_vec - L_vec - 1.0
-        phys_f_norm = gauge_projected_residual(f_vec) # Residual that must vanish | Equals |f1 - f2| for the dimer.
-        jacobian = get_Jacobian(U, epsilon_vec, h_vec, dh, t_eff, J_eff, beta, l_max, mu)
+        f_vec = get_residual(nf_vec, L_vec)
+        phys_f_norm = gauge_projected_residual(f_vec)       # Residual that must vanish | Equals |f1 - f2| for the dimer.
+        jacobian = get_Jacobian(U, epsilon_vec, h_vec, dh, t_eff, J_eff, beta, l_max, N_target)
  
         # Gauge-fixed Newton's method | h1 + h2 held fixed
         try:
             delta_h = gauge_fixed_newton_step(jacobian, f_vec)
         except np.linalg.LinAlgError:
-            print('ERROR: SINGULAR JACOBIAN')
-            print(f'U: {U}')
-            print(f'beta: {beta}')
-            print(f'N: {N_target}')
-            print(f'epsilon_vec: {epsilon_vec}')
-            sys.exit()
+            raise RuntimeError("Error: Singularity in Jacobian inversion.")
 
         h_vec_update = h_vec + ALPHA_H * delta_h
+
+        # Parameter update w/ new h
         t_eff_update = (1 - ALPHA_T_EFF) * t_eff + ALPHA_T_EFF * get_t_eff(evals_rotor, evecs_rotor, t, beta, l_max)
-        J_eff_update = (1 - ALPHA_J_EFF) * J_eff + ALPHA_J_EFF * get_J_eff(evals_spinon, evecs_spinon, t, beta)
- 
-        N = np.sum(nf_vec)
-        mu += ALPHA_MU * (N_target - N)
- 
+        J_eff_update = (1 - ALPHA_J_EFF) * J_eff + ALPHA_J_EFF * get_J_eff(t, rho)
+  
         did_converge = (
             np.allclose(h_vec_update, h_vec, atol=TOL_H) and
             np.allclose(t_eff_update, t_eff, atol=TOL_T_EFF) and
             np.allclose(J_eff_update, J_eff, atol=TOL_J_EFF) and
-            np.allclose(N, N_target, atol=TOL_N) and
             phys_f_norm < TOL_PHYS_F
         )
  
         count += 1
  
     if not did_converge:
-        print(f'ERROR: DID NOT CONVERGE AFTER {MAX_ITER} ITERATIONS')
-        sys.exit()
- 
-    evals_spinon, evecs_spinon = np.linalg.eigh(get_H_spinon(epsilon_vec, h_vec, t_eff, mu))
+        raise RuntimeError(f"Gauge-fixed Newton did not converge after {MAX_ITER} iterations.")
+
+    """Final evaluation of converged parameters."""
+    evals_spinon, evecs_spinon = np.linalg.eigh(get_H_spinon(epsilon_vec, h_vec_update, t_eff_update))
+    occ, mu = get_occupations(evals_spinon, N_target, beta)
+    rho = get_rho(evecs_spinon, occ)
+    nf_vec = get_nf_vec(evecs_spinon, occ)
+
+    # Rotor sector
     evals_rotor, evecs_rotor = np.linalg.eigh(get_H_rotor(U, h_vec, J_eff, l_max))
+    L_vec = get_L_vec(evals_rotor, evecs_rotor, beta, l_max)
+    L2_vec = get_L2_vec(evals_rotor, evecs_rotor, beta, l_max)
 
-    nf_vec = get_nf_vec(evals_spinon, evecs_spinon, beta)
-    L_vec = get_L_vec(evals_rotor, evecs_rotor, beta, l_max) 
-
-    return evals_spinon, evecs_spinon, evals_rotor, evecs_rotor, h_vec_update, t_eff_update, J_eff_update, nf_vec, L_vec, mu, count
+    return (evals_spinon, evecs_spinon, evals_rotor, evecs_rotor, 
+            h_vec_update, t_eff_update, J_eff_update, 
+            nf_vec, L_vec, L2_vec, mu, occ, rho, count)

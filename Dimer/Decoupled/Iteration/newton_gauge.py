@@ -5,12 +5,16 @@ import sys
 from ..core import (
     get_H_spinon,
     get_nf_vec,
+    get_occupations,
+    get_rho,
     get_rotor_eig_vec,
     get_L_vec,
-    get_Jacobian,
+    get_L2_vec,
     get_Z_vec,
     get_K_vec,
-    get_t_eff
+    get_t_eff,
+    get_Jacobian,
+    get_residual
 )
 
 # ====================================================================
@@ -33,6 +37,20 @@ from ..core import (
 #   arbitrarily parameters converge for arbitrarily high values of 
 #   U/t. 
 # ====================================================================
+
+MAX_ITER    = 1e9
+
+ALPHA_H     = 5e-3
+ALPHA_Z     = 5e-3
+ALPHA_K     = 5e-3
+ALPHA_T_EFF = 5e-3
+
+TOL_H       = 1e-9
+TOL_T_EFF   = 1e-9
+TOL_Z       = 1e-9
+TOL_K       = 1e-9
+TOL_N       = 1e-6
+TOL_PHYS_F  = 1e-9
 
 def gauge_fixed_newton_step(jacobian, f):
     """
@@ -69,77 +87,67 @@ def gauge_projected_residual(f):
 
     return np.linalg.norm(f - u * (u @ f))
 
-def iterate_newton_gauge(epsilon_vec, t_mat, U, t_eff_mat_guess, h_vec_guess, Z_vec_guess, K_vec_guess, beta, l_max, N_target=2):
+def iterate_newton_gauge(epsilon_vec, t, U, t_eff_guess, h_vec_guess, Z_vec_guess, K_vec_guess, beta, l_max, N_target=2):
     """Calculate self-consistent parameters w/ Newton's method & gauge fix"""
-    MAX_ITER = 1e7
-
-    ALPHA_H = 1e-3
-    ALPHA_Z = 1e-3
-    ALPHA_K = 1e-3
-    ALPHA_T_EFF = 1e-3
-    ALPHA_MU = 1e-4
-
-    TOL_H = 1e-10
-    TOL_T_EFF = 1e-10
-    TOL_Z = 1e-10
-    TOL_K = 1e-10
-    TOL_N = 1e-6
-    TOL_PHYS_F = 1e-10
-
-    mu = 0.0 # Global chemical potential
-    dh = 1e-5 # Finite difference step
+    dh = 1e-5 # Finite difference step, 1e-5 most effective ala Numerical Recipes
 
     did_converge = False
     count = 1
 
-    h_vec_update, Z_vec_update, K_vec_update, t_eff_mat_update = h_vec_guess, Z_vec_guess, K_vec_guess, t_eff_mat_guess
+    h_vec_update, Z_vec_update, K_vec_update, t_eff_update = h_vec_guess, Z_vec_guess, K_vec_guess, t_eff_guess
 
     while not did_converge and count < MAX_ITER:
-        h_vec, Z_vec, K_vec, t_eff_mat = h_vec_update, Z_vec_update, K_vec_update, t_eff_mat_update
+        h_vec, Z_vec, K_vec, t_eff = h_vec_update, Z_vec_update, K_vec_update, t_eff_update
         
-        evals_spinon, evecs_spinon = np.linalg.eigh(get_H_spinon(epsilon_vec, t_eff_mat, h_vec, mu))
-        evals_rotor_vec, evecs_rotor_vec = get_rotor_eig_vec(U, h_vec, K_vec, l_max)
+        # Spinon sector
+        evals_spinon, evecs_spinon = np.linalg.eigh(get_H_spinon(epsilon_vec, t_eff, h_vec))
+        occ, mu = get_occupations(evals_spinon, N_target, beta)
+        nf_vec = get_nf_vec(evecs_spinon, occ)
+        rho = get_rho(evecs_spinon, occ)
 
-        nf_vec = get_nf_vec(evals_spinon, evecs_spinon, beta)
+        # Rotor sector
+        evals_rotor_vec, evecs_rotor_vec = get_rotor_eig_vec(U, h_vec, K_vec, l_max)
         L_vec = get_L_vec(evals_rotor_vec, evecs_rotor_vec, beta, l_max)
 
-        f_vec = nf_vec - L_vec - 1.0
+        # Gauge-fixed Jacobian
+        f_vec = get_residual(nf_vec, L_vec)
         phys_f_norm = gauge_projected_residual(f_vec) # Residual norm that must vanish
-        jacobian = get_Jacobian(epsilon_vec, U, t_eff_mat, h_vec, dh, K_vec, beta, l_max, mu)
-
+        jacobian = get_Jacobian(epsilon_vec, U, t_eff, h_vec, dh, K_vec, 
+                                beta, l_max, N_target)
         delta_h = gauge_fixed_newton_step(jacobian, f_vec)
-
-        # Update parameters
         h_vec_update = h_vec + ALPHA_H * delta_h 
-        Z_vec_update = (1.0 - ALPHA_Z) * Z_vec + ALPHA_Z * get_Z_vec(evals_rotor_vec, evecs_rotor_vec, beta)
-        K_vec_update = (1.0 - ALPHA_K) * K_vec + ALPHA_K * get_K_vec(t_mat, Z_vec, evals_spinon, evecs_spinon, beta)
-        t_eff_mat_update = (1 - ALPHA_T_EFF) * t_eff_mat + ALPHA_T_EFF * get_t_eff(t_mat, Z_vec)
 
-        # Adjust total particle number
-        N = np.sum(nf_vec)
-        mu += ALPHA_MU * (N_target - N)
+        # Update parameters with new h
+        Z_vec_update = (1.0 - ALPHA_Z) * Z_vec + ALPHA_Z * get_Z_vec(evals_rotor_vec, evecs_rotor_vec, beta)
+        K_vec_update = (1.0 - ALPHA_K) * K_vec + ALPHA_K * get_K_vec(t, Z_vec, rho)
+        t_eff_update = (1.0 - ALPHA_T_EFF) * t_eff + ALPHA_T_EFF * get_t_eff(t, Z_vec)
 
         # Test convergence of all parameters within selected bounds
         did_converge = (
             np.allclose(h_vec_update, h_vec, atol=TOL_H) and
-            np.allclose(t_eff_mat_update, t_eff_mat, atol=TOL_T_EFF) and
+            np.allclose(t_eff_update, t_eff, atol=TOL_T_EFF) and
             np.allclose(Z_vec_update, Z_vec, atol=TOL_Z) and
             np.allclose(K_vec_update, K_vec, atol=TOL_K) and
-            np.allclose(N, N_target, atol=TOL_N) and
             phys_f_norm < TOL_PHYS_F
         )
 
         count += 1
 
     if not did_converge:
-        print(f'ERROR: DID NOT CONVERGE AFTER {MAX_ITER} ITERATIONS')
-        sys.exit()
+        raise RuntimeError(f"Gauge-fixed Newton did not converge after {MAX_ITER} iterations.")
 
-    # Calculate nf, L with final Hamiltonians before return
-    evals_spinon, evecs_spinon = np.linalg.eigh(get_H_spinon(epsilon_vec, t_eff_mat_update, h_vec_update, mu))
+    """Final evaluation of converged parameters."""
+    # Spinon sector
+    evals_spinon, evecs_spinon = np.linalg.eigh(get_H_spinon(epsilon_vec, t_eff_update, h_vec_update))
+    occ, mu = get_occupations(evals_spinon, N_target, beta)
+    rho = get_rho(evecs_spinon, occ)
+    nf_vec = get_nf_vec(evecs_spinon, occ)
+
+    # Rotor sector
     evals_rotor_vec, evecs_rotor_vec = get_rotor_eig_vec(U, h_vec_update, K_vec_update, l_max)
-
-    nf_vec = get_nf_vec(evals_spinon, evecs_spinon, beta)
     L_vec = get_L_vec(evals_rotor_vec, evecs_rotor_vec, beta, l_max)
+    L2_vec = get_L2_vec(evals_rotor_vec, evecs_rotor_vec, beta, l_max)
 
-    return evals_spinon, evecs_spinon, evals_rotor_vec, evecs_rotor_vec, h_vec_update, Z_vec_update, K_vec_update, t_eff_mat, nf_vec, L_vec, mu, count
+    return (evals_spinon, evecs_spinon, evals_rotor_vec, evecs_rotor_vec, 
+            h_vec_update, Z_vec_update, K_vec_update, t_eff, 
+            nf_vec, L_vec, L2_vec, mu, occ, rho, count)

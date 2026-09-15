@@ -113,9 +113,8 @@ def get_J_eff_mat(evals_spinon, evecs_spinon, t_mat, beta: Union[float, None], N
     evecs_spinon    : (N,N) Diagonalizing matrix of the spinon Hamiltonian. U[i,j] = i-th component of j-th eigenvector
     t_mat           : (N,N) Hopping matrix
     """
-    U = evecs_spinon
     fd_vals = Helpers.fermi(evals_spinon, beta)
-    return N_at * t_mat * ((U.conj() * fd_vals) @ U.T)  
+    return N_at * t_mat * ((evecs_spinon.conj() * fd_vals) @ evecs_spinon.T)  
 
 def get_K_vec(J_eff_mat, phi_vec, N_sites: int) -> np.ndarray:
     """Calculate intra-cluster interaction parameter.
@@ -157,7 +156,7 @@ def get_bond_vec(evals_rotor_vec, evecs_rotor_vec, l_max: int, beta: Union[float
     N_clusters = int(N_sites/2)
     bond_vec = np.zeros(N_clusters)
 
-    # exp(i(theta_1 - theta_2)): raise l1, lower l2. Cluster-independent, so build once.
+    # exp(i(theta_1 - theta_2)): raise l1, lower l2. Cluster-independent operator
     bond_op = get_shift_op(0, l_max) @ get_shift_op(1, l_max).conj().T
 
     for m in range(N_clusters):
@@ -184,9 +183,9 @@ def get_renorm_mat(phi_vec, bond_vec, N_sites: int) -> np.ndarray:
     # Comb through and set correlated intra-cluster amplitudes
     for i in range(N_sites):
         for j in range(N_sites):
-            if i == j:                  # By definition, should be unity on the diagonal
+            if i == j:                              # By definition, should be unity on the diagonal
                 renorm_mat[i,j] = 1    
-            elif cluster_mask(N_sites)[i,j]:     # If in the same cluster, set exact correlation <exp[i(theta_1 - theta_2)]>
+            elif cluster_mask(N_sites)[i,j]:        # If in the same cluster, set exact correlation <exp[i(theta_1 - theta_2)]>
                 renorm_mat[i,j] = bond_vec[cluster_id(N_sites)[i]]
     
     return renorm_mat

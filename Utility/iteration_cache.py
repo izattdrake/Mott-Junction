@@ -45,6 +45,7 @@ class IterationCache:
         elif isinstance(value, (float, np.floating)):
             return f"{value:.12g}"
         else:
+            print(value)
             raise ValueError
 
     @staticmethod

@@ -32,7 +32,7 @@ def get_H_spinon(epsilon_vec: np.ndarray, t_eff_mat: np.ndarray, h_vec: np.ndarr
 def get_nf_vec(evals_spinon: np.ndarray, evecs_spinon: np.ndarray, beta: Union[float, None], N_at: int) -> np.ndarray:
     """Calculate spinon occupation at all sites."""
     fd_vals = [Helpers.fermi(energy, beta) for energy in evals_spinon]      
-    nf = N_at * (np.abs(evecs_spinon) ** 2 @ fd_vals)     
+    nf = N_at * (np.abs(evecs_spinon)**2 @ fd_vals)     
     return nf
 
 def get_t_eff(t_mat: np.ndarray, Z_vec: np.ndarray) -> np.ndarray:

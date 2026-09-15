@@ -11,17 +11,16 @@ def spectral_by_hand(freqs, U, t, eta=1e-2):
     None
     
 if __name__ == "__main__":
-    epsilon, t, l_max = 0.5, 1.0, 15
+    epsilon, t, l_max = -1.0, 1.0, 15
     delta=0.05
     x = np.linspace(-5, 5, 1000, dtype=complex)
     z = x + 1j*delta
 
-    U = 0.04
+    U = 4.0
 
     exact_dimer = ExactDimer(epsilon, U, t, mu=U/2)
     decoupled_dimer = DecoupledDimer(epsilon, U, t, l_max, print_cache_results=True)
-    print("here")
-    coupled_dimer = CoupledDimer(epsilon, U, t, l_max, print_cache_results=True, nearest_params_max_dist=False)
+    coupled_dimer = CoupledDimer(epsilon, U, t, l_max, print_cache_results=True)
 
     gf_exact = exact_dimer.get_spectral_vec(x, imag_delta=delta)[:,0]
     gf_c = coupled_dimer.get_spectral_vec(x, imag_delta=delta)[:,0]

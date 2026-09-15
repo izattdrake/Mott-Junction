@@ -1,7 +1,7 @@
 import numpy as np
 import sys
 
-from typing import Sequence, Union, Tuple
+from typing import Union, Tuple
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
@@ -19,6 +19,8 @@ def get_H_spinon(epsilon_vec, t_eff, h_vec):
 
 def get_occupations(evals_spinon, N_target: float, beta: Union[float, None],
                     deg_tol: float=1e-10) -> Tuple[np.ndarray, float]:
+    """Calculate orbital occupancy vector and chemical potential to enforce
+    particle number."""
     if not (0.0 <= N_target <= 4):
         raise ValueError(f"N_target must lie in [0, 4]")
     
@@ -51,7 +53,7 @@ def get_nf_vec(evecs_spinon, occ):
     return nf
 
 def get_rho(evecs_spinon, occ):
-    """Calculate the per-spin density matrix rho_{ij} = <f^+_i f_j>."""
+    """Calculate the thermal hopping matrix rho_{ij} = <f^+_i f_j>."""
     return (evecs_spinon * occ[np.newaxis, :]) @ evecs_spinon.conj().T
 
 def get_t_eff(t, Z_vec):
@@ -142,13 +144,13 @@ def get_Jacobian_nf(epsilon_vec, t_eff, h_vec, dh: float, beta: Union[float, Non
         h_p[site] += dh/2.0
         h_m[site] -= dh/2.0
 
-        evals_spinon_p, evecs_spinon_p = np.linalg.eigh(get_H_spinon(epsilon_vec, t_eff, h_p))
-        evals_spinon_m, evecs_spinon_m = np.linalg.eigh(get_H_spinon(epsilon_vec, t_eff, h_m))
+        evals_p, evecs_p = np.linalg.eigh(get_H_spinon(epsilon_vec, t_eff, h_p))
+        evals_m, evecs_m = np.linalg.eigh(get_H_spinon(epsilon_vec, t_eff, h_m))
 
-        occ_p, _ = get_occupations(evals_spinon_p, N_target, beta)
-        occ_m, _ = get_occupations(evals_spinon_m, N_target, beta)
+        occ_p, _ = get_occupations(evals_p, N_target, beta)
+        occ_m, _ = get_occupations(evals_m, N_target, beta)
 
-        J[:,site] = (get_nf_vec(evecs_spinon_p, occ_p) - get_nf_vec(evecs_spinon_m, occ_m)) / dh
+        J[:,site] = (get_nf_vec(evecs_p, occ_p) - get_nf_vec(evecs_m, occ_m)) / dh
 
     return J
 
@@ -162,10 +164,10 @@ def get_Jacobian_L(U, h_vec, dh: float, K_vec: np.ndarray, beta: Union[float, No
         h_m = h_vec[site] - dh / 2.0
         
         # May need to calculate K_vec_p, K_vec_m
-        evals_rotor_p, evecs_rotor_p = np.linalg.eigh(get_H_rotor(U, h_p, K_vec[site], l_max))
-        evals_rotor_m, evecs_rotor_m = np.linalg.eigh(get_H_rotor(U, h_m, K_vec[site], l_max))
+        evals_p, evecs_p = np.linalg.eigh(get_H_rotor(U, h_p, K_vec[site], l_max))
+        evals_m, evecs_m = np.linalg.eigh(get_H_rotor(U, h_m, K_vec[site], l_max))
 
-        J[site,site] = (get_L(evals_rotor_p, evecs_rotor_p, beta, l_max) - get_L(evals_rotor_m, evecs_rotor_m, beta, l_max)) / dh
+        J[site,site] = (get_L(evals_p, evecs_p, beta, l_max) - get_L(evals_m, evecs_m, beta, l_max)) / dh
 
     return J
 
@@ -175,6 +177,6 @@ def get_Jacobian(epsilon_vec, U, t_eff, h_vec, dh: float, K_vec: np.ndarray, bet
     J_L = get_Jacobian_L(U, h_vec, dh, K_vec, beta, l_max)
 
     # TODO: CHECK SIGN OF JACOBIAN
-    J = J_nf - J_L
+    J = J_L - J_nf
 
     return J

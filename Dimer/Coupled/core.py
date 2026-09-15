@@ -2,7 +2,7 @@ import numpy as np
 import itertools
 import sys
 
-from typing import Union, Sequence
+from typing import Union, Tuple
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
@@ -42,10 +42,41 @@ def get_eff_rotor_index(l1: int, l2: int, l_max: int):
 # ====================================================================
 #   SPINON SECTOR
 # ====================================================================
-def get_H_spinon(epsilon_vec, h_vec, t_eff, mu: float):
+def get_H_spinon(epsilon_vec, h_vec, t_eff):
     """Return spinon Hamiltonian in a spin subspace"""
-    H = np.diag(epsilon_vec - h_vec - mu) - np.diag(np.array([t_eff]), k=1) - np.diag(np.array([t_eff]), k=-1)
+    H = np.array([[epsilon_vec[0] - h_vec[0], -t_eff],
+                     [-t_eff, epsilon_vec[1] - h_vec[1]]])
     return H
+
+def get_occupations(evals_spinon, N_target: float, beta: Union[float, None],
+                    deg_tol: float=1e-10) -> Tuple[np.ndarray, float]:
+    """Calculate orbital occupancy vector and chemical potential to enforce
+    particle number."""
+    if not (0.0 <= N_target <= 4):
+        raise ValueError(f"N_target must lie in [0, 4]")
+    
+    if beta is None:
+        N_per_spin = N_target / 2.0
+        if abs(evals_spinon[1] - evals_spinon[0]) < deg_tol:
+            occ = np.full(2, N_per_spin / 2.0)
+        else:
+            occ = np.zeros(2)
+            occ[0] = min(N_per_spin, 1.0)
+            occ[1] = max(N_per_spin - 1.0, 0.0)
+        return occ, 0.0
+    
+    width = 50.0 / beta
+    lo, hi = evals_spinon.min() - width, evals_spinon.max() + width
+    for _ in range(200):
+        mu = 0.5 * (lo + hi)
+        N = 2 * (Helpers.fermi(evals_spinon[0], beta, mu) + Helpers.fermi(evals_spinon[1], beta, mu))
+        if N > N_target:
+            hi = mu
+        else:
+            lo = mu
+    mu = 0.5 * (lo + hi)
+    occ = np.array([Helpers.fermi(evals_spinon[0], beta, mu), Helpers.fermi(evals_spinon[1], beta, mu)])
+    return occ, mu
 
 def get_t_eff(evals_rotor, evecs_rotor, t: float, beta: Union[float, None], l_max: int):
     """Calculates effective spinon tunneling"""
@@ -70,11 +101,14 @@ def get_t_eff(evals_rotor, evecs_rotor, t: float, beta: Union[float, None], l_ma
     t_eff = t * np.sum(bz_weights * expectation_vals) / 2
     return t_eff
 
-def get_nf_vec(evals_spinon, evecs_spinon, beta: Union[float, None]):
+def get_nf_vec(evecs_spinon, occ):
     """Calculates spinon occupation at every site"""
-    fd_vals = Helpers.fermi(evals_spinon, beta)
-    nf_vec = 2 * np.abs(evecs_spinon)**2 @ fd_vals
+    nf_vec = 2 * (np.abs(evecs_spinon)**2 @ occ)
     return nf_vec
+
+def get_rho(evecs_spinon, occ):
+    """Calculate the thermal hopping matrix rho_{ij} = <f^+_i f_j>."""
+    return (evecs_spinon * occ[np.newaxis, :]) @ evecs_spinon.conj().T
 
 # ====================================================================
 #   ROTOR SECTOR
@@ -98,79 +132,89 @@ def get_H_rotor(U: float, h_vec, J_eff: float, l_max: int):
 
     return H
 
-def get_J_eff(evals_spinon, evecs_spinon, t: float, beta: Union[float, None]):
+def get_J_eff(t, rho):
     """Calculates J^{eff}_{12} | <f^+_1 f_2> calculated by diagaonlization then FD distribution"""
-    J_eff = 2 * t * np.sum(np.conj(evecs_spinon[0,:]) * evecs_spinon[1, :] * Helpers.fermi(evals_spinon, beta))
-    return J_eff
+    return 2.0 * t * np.real(rho[0, 1])
+
+def _thermal_diag(evals_rotor, evecs_rotor, beta: Union[float, None], diag_op):
+    """Thermal average of an operator that is diagonal in the |l1,l2> basis.
+    Unlike the decoupled case there is one rotor Hamiltonian for the whole dimer."""
+    probs = np.abs(evecs_rotor)**2            
+    exp_vals = diag_op @ probs              
+    return np.sum(Helpers.bz_weights(evals_rotor, beta) * exp_vals)
 
 def get_L(evals_rotor, evecs_rotor, beta: Union[float, None], l_max: int, site: int):
-    """Calculates thermal average <L_i> at one site"""
-    bz_weights = Helpers.bz_weights(evals_rotor, beta)
+    """Thermal average <L_i> at one site."""
+    l_vals = get_eff_rotor_basis(l_max)[:, site].astype(float)
+    return _thermal_diag(evals_rotor, evecs_rotor, beta, l_vals)
 
-    basis = get_eff_rotor_basis(l_max)
-    l_vals = basis[:, site].astype(float)
- 
-    # <psi_n|L|\psi_n>
-    exp_vals = l_vals @ np.abs(evecs_rotor)**2
- 
-    L = np.sum(bz_weights * exp_vals)
-    return L
- 
 def get_L_vec(evals_rotor, evecs_rotor, beta: Union[float, None], l_max: int):
-    """Calculate thermal average <L_i> at every site"""
-    L_vec = np.zeros(2)
-    for site in range(2):
-        L_vec[site] = get_L(evals_rotor, evecs_rotor, beta, l_max, site)
-    return L_vec
+    return np.array([get_L(evals_rotor, evecs_rotor, beta, l_max, site) for site in range(2)])
+
+def get_L2(evals_rotor, evecs_rotor, beta: Union[float, None], l_max: int, site: int):
+    """Thermal average <L_i^2> at one site."""
+    l_vals = get_eff_rotor_basis(l_max)[:, site].astype(float)
+    return _thermal_diag(evals_rotor, evecs_rotor, beta, l_vals**2)
+
+def get_L2_vec(evals_rotor, evecs_rotor, beta: Union[float, None], l_max: int):
+    """Thermal average <L_i^2> at every site."""
+    return np.array([get_L2(evals_rotor, evecs_rotor, beta, l_max, site) for site in range(2)])
+
+def get_L1L2(evals_rotor, evecs_rotor, beta: Union[float, None], l_max: int):
+    """Thermal average <L_1 L_2>. Zero by construction for decoupled rotors;
+    nonzero here, and the quantity that distinguishes the cluster solution."""
+    basis = get_eff_rotor_basis(l_max).astype(float)
+    return _thermal_diag(evals_rotor, evecs_rotor, beta, basis[:, 0] * basis[:, 1])
+
+# ====================================================================
+#   CONSTRAINT METHODS
+# ====================================================================
+def get_residual(nf_vec, L_vec):
+    """Calculate constraint/charge vector f_i = <L_i> + 1 - <n_f,i"""
+    return L_vec + 1.0 - nf_vec
 
 # ====================================================================
 #   ITERATION METHODS
 # ====================================================================
-def get_Jacobian(U: float, epsilon_vec, h_vec, dh: float, 
-                 t_eff: float, J_eff: float, beta: Union[float, None], l_max: int, mu: float):
+def _Jacobian_nf(epsilon_vec, t_eff: float, h_vec, dh: float, beta: float, N_target: int):
     """
-        Return Jacobian used in Newton's method
+        Returns spinon occupancy contribution to Jacobian
     """
-    def get_Jacobian_nf(epsilon_vec, t_eff: float, h_vec, dh: float, beta: float):
-        """
-            Returns spinon occupancy contribution to Jacobian
-        """
-        J = np.zeros((2,2))
-        for j in range(2):
-            h_p, h_m = h_vec.copy(), h_vec.copy()
-            h_p[j] += dh / 2.0
-            h_m[j] -= dh / 2.0
- 
-            evals_p, evecs_p = np.linalg.eigh(get_H_spinon(epsilon_vec, h_p, t_eff, mu))
-            evals_m, evecs_m = np.linalg.eigh(get_H_spinon(epsilon_vec, h_m, t_eff, mu))
- 
-            nf_p = get_nf_vec(evals_p, evecs_p, beta)
-            nf_m = get_nf_vec(evals_m, evecs_m, beta)
- 
-            J[:,j] = (nf_p - nf_m) / dh
- 
-        return J
- 
-    def get_Jacobian_L(U: float, h_vec, dh: float, J_eff: float, l_max: int):
-        J = np.zeros((2, 2))
-        for j in range(2):
-            h_p, h_m = h_vec.copy(), h_vec.copy()
-            h_p[j] += dh / 2.0
-            h_m[j] -= dh / 2.0
- 
-            evals_p, evecs_p = np.linalg.eigh(get_H_rotor(U, h_p, J_eff, l_max))
-            evals_m, evecs_m = np.linalg.eigh(get_H_rotor(U, h_m, J_eff, l_max))
- 
-            for i in range(2):
-                L_p = get_L(evals_p, evecs_p, beta, l_max, i)
-                L_m = get_L(evals_m, evecs_m, beta, l_max, i)
-                J[i, j] = (L_p - L_m) / dh
- 
-        return J
- 
-    J_nf = get_Jacobian_nf(epsilon_vec, t_eff, h_vec, dh, beta)
-    J_L = get_Jacobian_L(U, h_vec, dh, J_eff, l_max)
- 
-    J = J_nf - J_L
- 
+    J = np.zeros((2,2))
+    for j in range(2):
+        h_p, h_m = h_vec.copy(), h_vec.copy()
+        h_p[j] += dh / 2.0
+        h_m[j] -= dh / 2.0
+
+        evals_p, evecs_p = np.linalg.eigh(get_H_spinon(epsilon_vec, h_p, t_eff))
+        evals_m, evecs_m = np.linalg.eigh(get_H_spinon(epsilon_vec, h_m, t_eff))
+
+        occ_p, _ = get_occupations(evals_p, N_target, beta)
+        occ_m, _ = get_occupations(evals_m, N_target, beta)
+
+        J[:,j] = (get_nf_vec(evecs_p, occ_p) - get_nf_vec(evecs_m, occ_m)) / dh
+
     return J
+
+def _Jacobian_L(U: float, h_vec, dh: float, J_eff: float, l_max: int, beta: Union[float, None]):
+    J = np.zeros((2, 2))
+    for j in range(2):
+        h_p, h_m = h_vec.copy(), h_vec.copy()
+        h_p[j] += dh / 2.0
+        h_m[j] -= dh / 2.0
+
+        evals_p, evecs_p = np.linalg.eigh(get_H_rotor(U, h_p, J_eff, l_max))
+        evals_m, evecs_m = np.linalg.eigh(get_H_rotor(U, h_m, J_eff, l_max))
+
+        for i in range(2):
+            L_p = get_L(evals_p, evecs_p, beta, l_max, i)
+            L_m = get_L(evals_m, evecs_m, beta, l_max, i)
+
+            J[i, j] = (L_p - L_m) / dh
+
+    return J
+
+def get_Jacobian(U: float, epsilon_vec, h_vec, dh: float, t_eff: float, J_eff: float, 
+                 beta: Union[float, None], l_max: int, N_target):
+    """Calculate the Jacobian used in Newton's method"""
+    return _Jacobian_L(U, h_vec, dh, J_eff, l_max, beta) - _Jacobian_nf(epsilon_vec, t_eff, h_vec, dh, beta, N_target)

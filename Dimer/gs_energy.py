@@ -9,7 +9,7 @@ from Utility.plotting import save_axes_centered
 
 if __name__ == "__main__":
     epsilon, t, beta, l_max = 0.0, 1.0, None, 15
-    U_vals = np.linspace(0.04, 5, 20)
+    U_vals = np.linspace(0.04, 5, 50)
 
     gs_exact, gs_c, gs_dc, gs_c_proj, gs_dc_proj = [], [], [], [], []
     count = 1
@@ -20,10 +20,10 @@ if __name__ == "__main__":
 
         gs_exact.append(exact_dimer.get_E_gs())
 
-        gs_c.append(coupled_dimer.get_E_gs())
+        gs_c.append(coupled_dimer.get_energy_MF())
         gs_c_proj.append(coupled_dimer.get_E_gs_proj())
 
-        gs_dc.append(decoupled_dimer.get_E_gs())
+        gs_dc.append(decoupled_dimer.get_energy_MF())
         gs_dc_proj.append(decoupled_dimer.get_E_gs_proj())
 
     fig, ax = plt.subplots(figsize=(6.5, 4.2))
@@ -37,7 +37,7 @@ if __name__ == "__main__":
     ax.plot(U_vals, gs_dc_proj, label="Decoupled (projected)", color="tomato", linestyle="--")
  
     ax.set_xlabel(r"$U/t$")
-    ax.set_ylabel(r"$E_{\mathrm{g}}/t$")
+    ax.set_ylabel(r"$E_{\mathrm{g}}$")
     ax.set_xlim(U_vals.min(), U_vals.max())
     ax.grid(True, alpha=0.3, linewidth=0.6)
     ax.legend(handlelength=2.2, labelspacing=0.35, borderaxespad=0.5)
