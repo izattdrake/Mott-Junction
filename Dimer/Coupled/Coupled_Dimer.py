@@ -356,6 +356,10 @@ class CoupledDimer:
         """Get spinon/electron occupation at each lattice site."""
         return self._nf_vec
     
+    def get_double_occ_vec(self):
+        """D_i = <n_up n_down>_i = (<L_i^2> + <n_i> - 1) / 2."""
+        return 0.5 * (self._L2_vec + self._nf_vec - 1.0)
+
     def get_gf(self, z: np.ndarray, i: int=0, j: int=0):
         """Calculate Green"s function G_ij(z) on complex frequencies z (Matsubara or retarded okay) |
            Can pass scalar or vector values of z. Returns shape (len(z))"""

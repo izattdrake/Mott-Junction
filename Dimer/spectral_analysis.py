@@ -16,7 +16,7 @@ if __name__ == "__main__":
     x = np.linspace(-5, 5, 1000, dtype=complex)
     z = x + 1j*delta
 
-    U = 4.0
+    U = 4.23
 
     exact_dimer = ExactDimer(epsilon, U, t, mu=U/2)
     decoupled_dimer = DecoupledDimer(epsilon, U, t, l_max, print_cache_results=True)

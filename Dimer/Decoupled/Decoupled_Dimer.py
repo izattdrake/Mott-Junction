@@ -305,7 +305,7 @@ class DecoupledDimer:
     def get_energy_MF(self):
         """Mean-field energy accounting for difference in particle number:
             E = sum_i eps_i n_i
-            - 2 N_SPIN t rho_12 sqrt(Z_1 Z_2)
+            - 2 N_AT t rho_12 sqrt(Z_1 Z_2)
             + U/2 sum_i <L_i^2>
             + U/2 sum_i (n_i - 1)"""
         E_site = np.sum(self._epsilon_vec * self._nf_vec)

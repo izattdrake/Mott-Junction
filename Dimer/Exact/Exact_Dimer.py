@@ -171,6 +171,19 @@ class ExactDimer:
         
         return n
     
+    def get_double_occ_vec(self, beta: Union[None, float]=None):
+        """Calculate double occupancy D_i = <n_{i,up} n_{i,dn}> at every site"""
+        bz_weights = Helpers.bz_weights(self.evals, beta)
+        D = np.zeros(2)
+
+        for site in range(2):
+            n_up = c_cre[mode(site, 0)] @ c_ann[mode(site, 0)]
+            n_down = c_cre[mode(site, 1)] @ c_ann[mode(site, 1)]
+            dop = n_up @ n_down
+            D[site] = bz_weights @ np.einsum('am,ab,bm->m', self.evecs, dop, self.evecs)
+
+        return D
+
     def get_E_gs(self, grand_canonical: bool=False):
         """Return GS energy w/o grand-canonical chemical potential shift"""
         E_gs = self.evals[0]
