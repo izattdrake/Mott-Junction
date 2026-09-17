@@ -38,7 +38,7 @@ TOL_F       = 1e-9
 WEIGHT     = 1e-2
 NORM_FLOOR = 1e-10
 
-def modified_broyden_step(f_vec, x_vec, alpha, weight, 
+def modified_broyden_step(f_vec, x, alpha, weight, 
                           dF_hist, u_hist, x_prev, f_prev):
     """One modified Broyden step. dF_hist and u_hist accumulate the past residue
     differences."""
@@ -51,7 +51,7 @@ def modified_broyden_step(f_vec, x_vec, alpha, weight,
         return alpha * f_vec
 
     dF_hat = dF / norm
-    dx_hat = (x_vec - x_prev) / norm
+    dx_hat = (x - x_prev) / norm
     dF_hist.append(dF_hat)
     u_hist.append(alpha * dF_hat + dx_hat)
 

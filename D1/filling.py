@@ -18,20 +18,15 @@ if __name__ == '__main__':
     """Junction with hyperbolic tangent profile"""
     epsilon_vec = -0.25 * np.tanh((site_indices - int(N_sites/2.0)) / interface_width) - 0.25
     
-    U_vals = np.linspace(0.1, 6.0, 50)
+    U_vals = np.linspace(0.04, 6.0, 10)
 
     for U in U_vals:
         single_chain = SingleSite1D(
             epsilon_vec, U, t, l_max, beta=beta, N_sites=N_sites, 
             N_at=2, iteration_method=0, print_cache_results=True
         )
-        cluster_chain = ClusterSite1D(
-            epsilon_vec, U, t, l_max, beta=beta, N_sites=N_sites, 
-            N_at=2, iteration_method=0, print_cache_results=True
-        )
 
         single_filling = single_chain.get_filling_vec()
-        cluster_filling = cluster_chain.get_filling_vec()
 
         site_vals = np.arange(N_sites)
 
@@ -40,7 +35,6 @@ if __name__ == '__main__':
         plt.grid(True, alpha=0.3)
 
         plt.plot(np.arange(N_sites), single_filling, label='Single', marker='o', linestyle='-', color='dodgerblue')
-        plt.plot(np.arange(N_sites), cluster_filling, label='Cluster', marker='o', linestyle='-', color='tomato')
         
         plt.xlabel(r"Site", fontsize=16, labelpad=20)
         plt.ylabel(r"$n^f$", rotation=0, fontsize=16, labelpad=20)

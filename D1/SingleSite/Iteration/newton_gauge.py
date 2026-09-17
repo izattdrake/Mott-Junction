@@ -10,7 +10,7 @@ from ..core import (
     get_Jacobian,
     get_Z_vec,
     get_K_vec,
-    get_t_eff
+    get_t_eff_mat
 )
 
 def gauge_fixed_newton_step(jacobian, f):
@@ -92,7 +92,7 @@ def iterate_newton_gauge(epsilon_vec, t_mat, U, t_eff_mat_guess, h_vec_guess, Z_
         h_vec_update = h_vec + ALPHA_H * delta_h 
         Z_vec_update = (1.0 - ALPHA_Z) * Z_vec + ALPHA_Z * get_Z_vec(evals_rotor_vec, evecs_rotor_vec, beta, N_sites)
         K_vec_update = (1.0 - ALPHA_K) * K_vec + ALPHA_K * get_K_vec(t_mat, Z_vec, evals_spinon, evecs_spinon, beta, N_at)
-        t_eff_mat_update = (1 - ALPHA_T_EFF) * t_eff_mat + ALPHA_T_EFF * get_t_eff(t_mat, Z_vec)
+        t_eff_mat_update = (1 - ALPHA_T_EFF) * t_eff_mat + ALPHA_T_EFF * get_t_eff_mat(t_mat, Z_vec)
 
         # Adjust total particle number
         N = np.sum(nf_vec)

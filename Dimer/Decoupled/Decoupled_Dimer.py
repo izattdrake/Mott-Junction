@@ -45,6 +45,8 @@ class DecoupledDimer:
     _ITERATION_NAMES = ("h_vec", "Z_vec", "K_vec", "t_eff", "nf_vec", "L_vec", "L2_vec", "mu", "occ", "rho", "count")
     _NEAREST_NAMES = ("h_vec", "Z_vec")
 
+    _ALGO_NAMES = ["BROYDEN", "NEWTON_GAUGE"]
+
     def __init__(self, epsilon: float, U: float, t: float, l_max: int, beta: Union[None, float]=None, N_target=2, 
                  iteration_method=0, use_cache=True, cache_dir=None, try_nearest_params=True, nearest_params_max_dist=0.5,
                  print_cache_results=False):
@@ -110,7 +112,7 @@ class DecoupledDimer:
                               f"{near['params']} (dist = {near['distance']:.3f})")
                 else:
                     if print_cache_results:
-                        print(f"{self.__class__.__name__}.__init__: Iterating with default params")
+                        print(f"{self.__class__.__name__}.__init__: Nearest start not available. Running {self._ALGO_NAMES[iteration_method]} w/ default params.")
             
             if iteration_method == 0: # Iteration w/ modified Broyden's method 
                 (
