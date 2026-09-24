@@ -73,7 +73,7 @@ class SingleSite1D:
         
         self._t_vec = np.atleast_1d(t)
         self._t_mat = Helpers.hopping_matrix(t, N_sites, PBC)
-
+        print(self._t_mat)
         self._dim = 2 * l_max + 1 # Dimension for one site
 
         """Cache & Iteration"""
@@ -100,7 +100,7 @@ class SingleSite1D:
 
             self._mu           = float(data["mu"])
             self._occ_vec      = np.asarray(data["occ_vec"], float).copy()
-            self._rho          = data["rho_mat"]
+            self._rho_mat          = data["rho_mat"]
 
             self._count        = int(data["count"])
 

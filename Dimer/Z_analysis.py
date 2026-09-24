@@ -12,18 +12,18 @@ def Z_by_hand(U, t):
     return Z
 
 if __name__ == '__main__':
-    epsilon, t, beta, l_max = 0.0, 1.0, None, 15
+    epsilon, t, beta, l_max = 0.0, 1.0, 30, 15
 
-    U_vals = np.linspace(0.04, 5.0, 50)
+    U_vals = np.linspace(0.00, 5.0, 100)
     
     Z_exact, Z_c, Z_dc = [], [], []
 
     for U in U_vals:
         exact_dimer = ExactDimer(epsilon, U, t, mu=U/2) 
-        c_dimer = CoupledDimer(epsilon, U, t, l_max, print_cache_results=True)
-        dc_dimer = DecoupledDimer(epsilon, U, t, l_max, print_cache_results=True)
+        c_dimer = CoupledDimer(epsilon, U, t, l_max, beta, print_cache_results=True)
+        dc_dimer = DecoupledDimer(epsilon, U, t, l_max, beta, print_cache_results=True)
 
-        Z_exact.append(exact_dimer.get_qp_vec()[0])
+        Z_exact.append(exact_dimer.get_qp_vec(beta)[0])
         Z_c.append(c_dimer.get_qp_vec()[0])
         Z_dc.append(dc_dimer.get_Z_vec()[0])
 

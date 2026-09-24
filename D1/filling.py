@@ -18,28 +18,27 @@ if __name__ == '__main__':
     """Junction with hyperbolic tangent profile"""
     epsilon_vec = -0.25 * np.tanh((site_indices - int(N_sites/2.0)) / interface_width) - 0.25
     
-    U_vals = np.linspace(0.04, 6.0, 10)
+    U = 2.0
 
-    for U in U_vals:
-        single_chain = SingleSite1D(
-            epsilon_vec, U, t, l_max, beta=beta, N_sites=N_sites, 
-            N_at=2, iteration_method=0, print_cache_results=True
-        )
+    single_chain = SingleSite1D(
+        epsilon_vec, U, (1.0, 0.1), l_max, beta=beta, N_sites=N_sites, 
+        N_at=2, N_target=N_sites, PBC=True, iteration_method=0, print_cache_results=True
+    )
 
-        single_filling = single_chain.get_filling_vec()
+    single_filling = single_chain.get_filling_vec()
 
-        site_vals = np.arange(N_sites)
+    site_vals = np.arange(N_sites)
 
-        plt.figure(figsize=(6, 4))
-        plt.axhline(y=1.0, linestyle='--', color='black', alpha=0.7)
-        plt.grid(True, alpha=0.3)
+    plt.figure(figsize=(6, 4))
+    plt.axhline(y=1.0, linestyle='--', color='black', alpha=0.7)
+    plt.grid(True, alpha=0.3)
 
-        plt.plot(np.arange(N_sites), single_filling, label='Single', marker='o', linestyle='-', color='dodgerblue')
-        
-        plt.xlabel(r"Site", fontsize=16, labelpad=20)
-        plt.ylabel(r"$n^f$", rotation=0, fontsize=16, labelpad=20)
+    plt.plot(np.arange(N_sites), single_filling, label='Single', marker='o', linestyle='-', color='dodgerblue')
+    
+    plt.xlabel(r"Site", fontsize=16, labelpad=20)
+    plt.ylabel(r"$n^f$", rotation=0, fontsize=16, labelpad=20)
 
-        plt.title(r"Filling w/ Doping at $T=0$: $U=$" + f"{U}")
+    plt.title(r"Filling w/ Doping at $T=0$: $U=$" + f"{U}")
 
-        plt.legend()
-        plt.show()
+    plt.legend()
+    plt.show()
