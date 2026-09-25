@@ -4,52 +4,58 @@ import sys
 from typing import Union
 from ..core import (
     get_H_spinon,
-    get_t_eff,
+    get_t_eff_mat,
     get_nf_vec,
     get_J_eff_mat,
     get_L_vec,
+    get_L2_vec,
     get_rotor_eig_vec,
     get_renorm_mat,
     get_phi_vec,
     get_bond_vec,
-    get_K_vec
+    get_K_vec,
+    get_occ_vec,
+    get_rho_mat,
+    get_residual
 )
 
-MAX_ITER    = 1e7
+# ====================================================================
+#   MODIFIED BROYDEN METHOD FOR CLUSTER-SITE APPROXIMATION 
+# --------------------------------------------------------------------
+#   In this script, we use an alternate iteration method for solving
+#   for the parameters in the cluster-site approximation. Broyden is
+#   a secant method in which we solve for the Jacobian once, then make
+#   successive corrections rather than solving for it every iteration.
+# --------------------------------------------------------------------
+#   Bryoden's method keeps a memory of (dh, df) pairs to build more
+#   accurate corrections. Corrections are weighted to keep the algo
+#   stable, and the singular gauge subspace never has to be removed.
+#   The method agrees with the gauge-fixed Newton's method script 
+#   to fantastic accuracy, reassuring myself that results are
+#   correct. 
+# ====================================================================
 
-ALPHA_H     = 1e-3
-ALPHA_T_EFF = 2e-2
-ALPHA_J_EFF = 2e-2
-ALPHA_K     = 2e-2
-ALPHA_MU    = 2e-2
+MAX_ITER   = 1e8
+ALPHA      = 5e-3
+TOL_F      = 1e-9
 
-TOL_H       = 1e-4
-TOL_T_EFF   = 1e-4
-TOL_J_EFF   = 1e-4
-TOL_K       = 1e-4
-TOL_N       = 1e-4
-TOL_F       = 1e-4
+WEIGHT     = 1e-2
+NORM_FLOOR = 1e-10
 
-# Modified-Broyden control parameters
-WEIGHT      = 1e-2
-MEMORY      = 8
-
-def modified_broyden_step(f_vec, h_vec, alpha, weight, dF_hist, u_hist, h_prev, f_prev):
-    """
-        One limited-memory modified-Broyden step.
-        The history lists dF_hist and u_hist accumulate the (normalized) residual 
-        differences and the Johnson vectors u = alpha * dFhat + dhhat
-    """
-    if h_prev is None:
+def modified_broyden_step(f_vec, x_vec, alpha, weight, 
+                          dF_hist, u_hist, x_prev, f_prev):
+    """One limited-memory modified-Broyden step. The history lists dF_hist and u_hist accumulate 
+    the (normalized) residual differences and the vectors u = alpha * dFhat + dhhat"""
+    if x_prev is None:
         return alpha * f_vec
  
     dF = f_vec - f_prev
     norm = np.linalg.norm(dF)
-    if norm < 1e-64:
+    if norm < NORM_FLOOR:
         return alpha * f_vec
  
     dF_hat = dF / norm
-    dh_hat = (h_vec - h_prev) / norm
+    dh_hat = (x_vec - x_prev) / norm
     dF_hist.append(dF_hat)
     u_hist.append(alpha * dF_hat + dh_hat)
  
@@ -62,85 +68,65 @@ def modified_broyden_step(f_vec, h_vec, alpha, weight, dF_hist, u_hist, h_prev, 
  
     return alpha * f_vec - np.array(u_hist).T @ gamma
  
-def iterate_broyden(epsilon_vec, U: float, t_mat, h_vec_guess, t_eff_mat_guess, J_eff_mat_guess, K_vec_guess, 
-                    beta: Union[float, None], l_max: int, N_sites: int, N_at: int, N_target: int):
-    """Calculate self-consistent parameters w/ modified Broyden's method"""
-    mu = 0.0 # Global chemical potential 
-    
-    # Modified-Broyden history for the constraint residual f = n - <L> - 1.
-    dF_hist = []
-    u_hist = []
-    h_prev = None
-    f_prev = None
+def iterate_broyden(epsilon_vec, U: float, t_mat, h_vec_guess, phi_vec_guess, bond_vec_guess, 
+                    beta: Union[float, None], l_max: int, N_sites: int, N_at: int, N_target: int, memory=8):
+    """Calculate self-consistent parameters w/ modified Broyden's method"""    
+    N_cluster = N_sites // 2
+
+    dF_hist, u_hist = [], []
+    x_prev = f_prev = None
  
     did_converge = False
     count = 1
 
-    h_vec_update, t_eff_mat_update, J_eff_mat_update, K_vec_update = h_vec_guess, t_eff_mat_guess, J_eff_mat_guess, K_vec_guess
+    # x is of dimension 2N_{sites} + M where M is the number of clusters (N_{sites}/2)
+    x = np.concatenate([np.asarray(h_vec_guess, float), np.asarray(phi_vec_guess, float), np.asarray(bond_vec_guess)])
 
     while not did_converge and count < MAX_ITER:
-        h_vec, t_eff_mat, J_eff_mat, K_vec  = h_vec_update, t_eff_mat_update, J_eff_mat_update, K_vec_update
- 
-        evals_spinon, evecs_spinon = np.linalg.eigh(get_H_spinon(epsilon_vec, t_eff_mat, h_vec, mu))
+        h_vec, phi_vec, bond_vec = x[:N_sites], x[N_sites: 2*N_sites], x[2*N_sites: 2*N_sites+N_cluster]
+
+        renorm_mat = get_renorm_mat(phi_vec, bond_vec, N_sites)
+
+        # Spinon sector
+        t_eff_mat = get_t_eff_mat(t_mat, renorm_mat)
+        evals_spinon, evecs_spinon = np.linalg.eigh(get_H_spinon(epsilon_vec, t_eff_mat, h_vec))
+        occ_vec, mu = get_occ_vec(evals_spinon, beta, N_sites, N_at, N_target)
+        nf_vec = get_nf_vec(evecs_spinon, occ_vec, N_at)
+        rho_mat = get_rho_mat(evecs_spinon, occ_vec)
+
+        # Rotor sector
+        J_eff_mat = get_J_eff_mat(t_mat, rho_mat, N_at)
+        K_vec = get_K_vec(J_eff_mat, phi_vec, N_sites)
         evals_rotor_vec, evecs_rotor_vec = get_rotor_eig_vec(U, J_eff_mat, K_vec, h_vec, l_max, N_sites)
-        
-        nf_vec = get_nf_vec(evals_spinon, evecs_spinon, beta, N_at)
         L_vec = get_L_vec(evals_rotor_vec, evecs_rotor_vec, beta, l_max, N_sites)
- 
-        f_vec = nf_vec - L_vec -  N_at / 2.0
-        delta_h = modified_broyden_step(f_vec, h_vec, ALPHA_H, WEIGHT,
-                                        dF_hist, u_hist, h_prev, f_prev)
-        if len(dF_hist) > MEMORY:
+
+        # Constraint & modified Broyden step
+        f_vec = np.concatenate([get_residual(nf_vec, L_vec, N_at),
+                                get_phi_vec(evals_rotor_vec, evecs_rotor_vec, l_max, beta, N_sites) - phi_vec,
+                                get_bond_vec(evals_rotor_vec, evecs_rotor_vec, l_max, beta, N_sites) - bond_vec])
+        
+        did_converge = np.linalg.norm(f_vec) < TOL_F
+        if did_converge:
+            break
+
+        delta_x = modified_broyden_step(f_vec, x, ALPHA, WEIGHT,
+                                        dF_hist, u_hist, x_prev, f_prev)
+        
+        if len(dF_hist) > memory:
             dF_hist.pop(0)
             u_hist.pop(0)
  
-        h_prev = h_vec.copy()
-        f_prev = f_vec.copy()
-        h_vec_update = h_vec + delta_h
- 
-        """Construct correlation/renormalization functions"""
-        phi_vec = get_phi_vec(evals_rotor_vec, evecs_rotor_vec, l_max, beta, N_sites)
-        bond_vec = get_bond_vec(evals_rotor_vec, evecs_rotor_vec, l_max, beta, N_sites)
-        renorm_mat = get_renorm_mat(phi_vec, bond_vec, N_sites)
+        x_prev, f_prev = x.copy(), f_vec.copy()
+        x = x + delta_x
 
-        """Usual update functions using renormalization functions"""
-        t_eff_mat_update = (1 - ALPHA_T_EFF) * t_eff_mat + ALPHA_T_EFF * get_t_eff(t_mat, renorm_mat)
-        J_eff_mat_update = (1 - ALPHA_J_EFF) * J_eff_mat + ALPHA_J_EFF * get_J_eff_mat(evals_spinon, evecs_spinon, t_mat, beta, N_at)
-        K_vec_update     = (1 - ALPHA_K)     * K_vec     + ALPHA_K     * get_K_vec(J_eff_mat, phi_vec, N_sites)
-
-        N = np.sum(nf_vec)
-        mu += ALPHA_MU * (N_target - N)
- 
-        did_converge = (
-            np.allclose(h_vec_update, h_vec, atol=TOL_H) and
-            np.allclose(t_eff_mat_update, t_eff_mat, atol=TOL_T_EFF) and
-            np.allclose(J_eff_mat_update, J_eff_mat, atol=TOL_J_EFF) and
-            np.allclose(K_vec_update, K_vec, atol=TOL_K) and
-            np.allclose(N, N_target, atol=TOL_N) and
-            np.linalg.norm(f_vec) < TOL_F
-        )
-        
-        print(count); count += 1
-        print(h_vec_update)
-        print(f"h: {np.allclose(h_vec_update, h_vec, atol=TOL_H)}")
-        print(f"t_eff: {np.allclose(t_eff_mat_update, t_eff_mat, atol=TOL_T_EFF)}")
-        print(f"J_eff: {np.allclose(J_eff_mat_update, J_eff_mat, atol=TOL_J_EFF)}")
-        print(f"K_vec: {np.allclose(K_vec_update, K_vec, atol=TOL_K)}")
-        print(f"N: {np.allclose(N, N_target, atol=TOL_N)}")
-        print(f"f: {np.linalg.norm(f_vec) < TOL_F}\n\n")
+        count += 1
 
     if not did_converge:
-        print(f'ERROR: Did not converge after {MAX_ITER} iterations')
-        sys.exit()
+        raise RuntimeError(f"Broyden did not converge after {MAX_ITER} iterations.")
     
-    evals_spinon, evecs_spinon = np.linalg.eigh(get_H_spinon(epsilon_vec, t_eff_mat, h_vec, mu))
-    evals_rotor_vec, evecs_rotor_vec = get_rotor_eig_vec(U, J_eff_mat, K_vec, h_vec, l_max, N_sites)
- 
-    phi_vec = get_phi_vec(evals_rotor_vec, evecs_rotor_vec, l_max, beta, N_sites)
-    bond_vec = get_bond_vec(evals_rotor_vec, evecs_rotor_vec, l_max, beta, N_sites)
-    renorm_mat = get_renorm_mat(phi_vec, bond_vec, N_sites)
+    L2_vec = get_L2_vec(evals_rotor_vec, evecs_rotor_vec, beta, l_max, N_sites)
 
-    nf_vec = get_nf_vec(evals_spinon, evecs_spinon, beta, N_at)
-    L_vec = get_L_vec(evals_rotor_vec, evecs_rotor_vec, beta, l_max, N_sites)
-
-    return evals_spinon, evecs_spinon, evals_rotor_vec, evecs_rotor_vec, h_vec_update, t_eff_mat_update, J_eff_mat_update, K_vec_update, renorm_mat, phi_vec, nf_vec, L_vec, mu, count
+    return (evals_spinon, evecs_spinon, evals_rotor_vec, evecs_rotor_vec, 
+            h_vec, phi_vec, t_eff_mat, J_eff_mat, K_vec, 
+            renorm_mat, bond_vec, nf_vec, L_vec, L2_vec, 
+            occ_vec, rho_mat, mu, count)

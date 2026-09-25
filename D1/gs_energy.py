@@ -4,28 +4,36 @@ import matplotlib.pyplot as plt
 from SingleSite.single_site_1D import SingleSite1D
 from ClusterSite.cluster_site_1D import ClusterSite1D
 
-if __name__ == "__main__":
-    t, l_max, N_sites = 1.0, 10, 50
-    epsilon_vec = np.zeros(N_sites)
-    U_vals = np.linspace(0.04, 5.0, 200)
-    Egs_single, Egs_cluster = [], []
-    count = 1
-    for U in U_vals:
-        sys_single = SingleSite1D(
-            epsilon_vec, U, t, l_max, beta=None, N_sites=N_sites, 
-            N_at=2, N_target=2, iteration_method=0, print_cache_results=True
-        )
+N_sites, N_at, N_target = 20, 2, 20
 
-        Egs_single.append(sys_single.get_energy_MF())
+t, l_max, beta = 1.0, 8, None
 
-    plt.figure(figsize=(6, 4))
+epsilon_vec = np.zeros(N_sites)
+U_vals = np.linspace(0.01, 3.0, 400)
 
-    plt.plot(U_vals, Egs_single, label=r"Single", marker="o", linestyle="-", color="dodgerblue")
-    #plt.plot(U_vals, Egs_cluster, label=r"Cluster", marker="o", linestyle="-", color="tomato")
+Egs_single, Egs_cluster = [], []
 
-    plt.xlabel(r"$U$", rotation=0, fontsize=16, labelpad=12)
-    plt.ylabel(r"$E_{gs}$", rotation=0, fontsize=16, labelpad=24)
-    plt.title(r"Ground-State Energy as a Function of $U$ at half-filling: $\beta=\infty$, $N_{\text{sites}}=$" + f"{N_sites}")
-    plt.grid(True, alpha=0.3)
-    plt.legend()
-    plt.show()
+for U in U_vals:
+    single = SingleSite1D(
+        epsilon_vec, U, t, l_max, beta=None, N_sites=N_sites, 
+        N_at=N_at, N_target=N_target, print_cache_results=True
+    )
+    cluster = ClusterSite1D(
+        epsilon_vec, U, t, l_max, beta=None, N_sites=N_sites, 
+        N_at=N_at, N_target=N_target, print_cache_results=True
+    )
+
+    Egs_single.append(single.get_energy_MF())
+    Egs_cluster.append(cluster.get_energy_MF())
+
+plt.figure(figsize=(6, 4))
+
+plt.plot(U_vals, Egs_single, label=r"Single", marker="o", linestyle="-", color="dodgerblue")
+plt.plot(U_vals, Egs_cluster, label=r"Cluster", marker="o", linestyle="-", color="tomato")
+
+plt.xlabel(r"$U$", rotation=0, fontsize=16, labelpad=12)
+plt.ylabel(r"$E_{g}$", rotation=0, fontsize=16, labelpad=24)
+plt.title(r"Ground-State Energy at Half-Filling: $\beta=\infty$, $N_{\text{sites}}=$" + f"{N_sites}")
+plt.grid(True, alpha=0.3)
+plt.legend()
+plt.show()

@@ -38,7 +38,8 @@ class SingleSite1D:
 
     """Names of the converged quantities in iteration methods" return order.
     Parameter guesses looked for in nearest parameter lookup, needed for calling fresh iteration"""
-    _ITERATION_NAMES = ("h_vec", "Z_vec", "K_vec", "t_eff_mat", "nf_vec", "L_vec", "L2_vec", "mu", "occ_vec", "rho_mat", "count")
+    _ITERATION_NAMES = ("h_vec", "Z_vec", "K_vec", "t_eff_mat", "nf_vec", "L_vec", "L2_vec", 
+                        "mu", "occ_vec", "rho_mat", "count")
     _NEAREST_NAMES = ("h_vec", "Z_vec")
 
     _ALGO_NAMES = ["BROYDEN", "NEWTON_GAUGE"]
@@ -73,7 +74,7 @@ class SingleSite1D:
         
         self._t_vec = np.atleast_1d(t)
         self._t_mat = Helpers.hopping_matrix(t, N_sites, PBC)
-        print(self._t_mat)
+        
         self._dim = 2 * l_max + 1 # Dimension for one site
 
         """Cache & Iteration"""

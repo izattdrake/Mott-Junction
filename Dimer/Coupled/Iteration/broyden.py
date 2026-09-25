@@ -68,7 +68,7 @@ def iterate_broyden(epsilon_vec, U, t, h_vec_guess, t_eff_guess,
                     beta, l_max, N_target=2, memory=8):
     """Calculate self-consistent parameters w/ modified Broyden's method"""    
     dF_hist, u_hist = [], []
-    x_prev, f_prev = None, None
+    x_prev = f_prev = None
  
     did_converge = False
     count = 1

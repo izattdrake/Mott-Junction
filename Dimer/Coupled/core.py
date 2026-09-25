@@ -24,7 +24,7 @@ from Utility.helpers import Helpers
 #   COMPUTATIONAL BASIS
 # ====================================================================
 def get_eff_rotor_basis(l_max: int):
-    """Returns |l1,l2> basis elements"""
+    """Returns |l1 l2> basis elements."""
     l_vals = np.arange(-l_max, l_max + 1)
     basis = list(itertools.product(
         l_vals, l_vals
@@ -143,22 +143,22 @@ def _thermal_diag(evals_rotor, evecs_rotor, beta: Union[float, None], diag_op):
     exp_vals = diag_op @ probs              
     return np.sum(Helpers.bz_weights(evals_rotor, beta) * exp_vals)
 
-def get_L(evals_rotor, evecs_rotor, beta: Union[float, None], l_max: int, site: int):
+def _L(evals_rotor, evecs_rotor, beta: Union[float, None], l_max: int, site: int):
     """Thermal average <L_i> at one site."""
     l_vals = get_eff_rotor_basis(l_max)[:, site].astype(float)
     return _thermal_diag(evals_rotor, evecs_rotor, beta, l_vals)
 
-def get_L_vec(evals_rotor, evecs_rotor, beta: Union[float, None], l_max: int):
-    return np.array([get_L(evals_rotor, evecs_rotor, beta, l_max, site) for site in range(2)])
-
-def get_L2(evals_rotor, evecs_rotor, beta: Union[float, None], l_max: int, site: int):
+def _L2(evals_rotor, evecs_rotor, beta: Union[float, None], l_max: int, site: int):
     """Thermal average <L_i^2> at one site."""
     l_vals = get_eff_rotor_basis(l_max)[:, site].astype(float)
     return _thermal_diag(evals_rotor, evecs_rotor, beta, l_vals**2)
 
+def get_L_vec(evals_rotor, evecs_rotor, beta: Union[float, None], l_max: int):
+    return np.array([_L(evals_rotor, evecs_rotor, beta, l_max, site) for site in range(2)])
+
 def get_L2_vec(evals_rotor, evecs_rotor, beta: Union[float, None], l_max: int):
     """Thermal average <L_i^2> at every site."""
-    return np.array([get_L2(evals_rotor, evecs_rotor, beta, l_max, site) for site in range(2)])
+    return np.array([_L2(evals_rotor, evecs_rotor, beta, l_max, site) for site in range(2)])
 
 def get_L1L2(evals_rotor, evecs_rotor, beta: Union[float, None], l_max: int):
     """Thermal average <L_1 L_2>. Zero by construction for decoupled rotors;
@@ -207,8 +207,8 @@ def _Jacobian_L(U: float, h_vec, dh: float, J_eff: float, l_max: int, beta: Unio
         evals_m, evecs_m = np.linalg.eigh(get_H_rotor(U, h_m, J_eff, l_max))
 
         for i in range(2):
-            L_p = get_L(evals_p, evecs_p, beta, l_max, i)
-            L_m = get_L(evals_m, evecs_m, beta, l_max, i)
+            L_p = _L(evals_p, evecs_p, beta, l_max, i)
+            L_m = _L(evals_m, evecs_m, beta, l_max, i)
 
             J[i, j] = (L_p - L_m) / dh
 

@@ -30,14 +30,14 @@ def get_H_spinon(epsilon_vec, t_eff_mat, h_vec) -> np.ndarray:
     return H
 
 def get_occ_vec(evals_spinon, beta: Union[float, None], N_sites: int,
-                    N_at: int, N_target: int, deg_tol: float=1e-10) -> Tuple[np.ndarray, float]:
+                N_at: int, N_target: int, deg_tol: float=1e-10) -> Tuple[np.ndarray, float]:
     """Calculate orbital occupancy vector and chemical potential to enforce
-    particle number. Occupancy is the per-spin occupation of an orbital.
-    Length is N_at, not N_sites!."""
+    particle number. Occupancy is the per-spin occupation of an orbital."""
     N_max = N_at * N_sites
     if not (0.0 <= N_target <= N_max):
         raise ValueError(f"N_target must lie in [0, {N_max}]")
 
+    # Automatically lock occupation to lowest-energy state stack
     if beta is None:
         occ_vec = np.zeros(N_sites)
         remaining = N_target / N_at
@@ -47,15 +47,16 @@ def get_occ_vec(evals_spinon, beta: Union[float, None], N_sites: int,
 
             while (j + 1 < N_sites and abs(evals_spinon[j+1] - evals_spinon[i]) < deg_tol):
                 j += 1
-            g = j - i + 1
 
+            g = j - i + 1
             fill = min(remaining, float(g))
-            occ_vec[i:j + 1] = fill / g
+            occ_vec[i: j+1] = fill / g
             remaining -= fill
             i = j + 1
 
         return occ_vec, 0.0
 
+    # At finite temperature, conduct bisection algo to find chemical potential
     width = 50.0 / beta
     lo, hi = evals_spinon.min() - width, evals_spinon.max() + width
     
@@ -72,18 +73,18 @@ def get_occ_vec(evals_spinon, beta: Union[float, None], N_sites: int,
     
     return occ_vec, mu
 
-def get_nf_vec(evecs_spinon, occ_vec, N_at: int):
-    """Calculate spinon occupation at all sites."""
-    return N_at * (np.abs(evecs_spinon)**2 @ occ_vec) 
+def get_t_eff_mat(t_mat, Z_vec):
+    """Calculate effective spinon tunneling matrix."""
+    sqrt_Z = np.sqrt(Z_vec)
+    return t_mat * np.outer(sqrt_Z, sqrt_Z)
 
 def get_rho_mat(evecs_spinon, occ_vec):
     """Calculate the thermal hopping matrix rho_{ij} = <f^+_i f_j>."""
     return (evecs_spinon * occ_vec[np.newaxis, :]) @ evecs_spinon.conj().T
 
-def get_t_eff_mat(t_mat, Z_vec):
-    """Calculate effective spinon tunneling matrix."""
-    sqrt_Z = np.sqrt(Z_vec)
-    return t_mat * np.outer(sqrt_Z, sqrt_Z)
+def get_nf_vec(evecs_spinon, occ_vec, N_at: int):
+    """Calculate spinon occupation at all sites."""
+    return N_at * (np.abs(evecs_spinon)**2 @ occ_vec) 
 
 # ====================================================================
 #   ROTOR SECTOR

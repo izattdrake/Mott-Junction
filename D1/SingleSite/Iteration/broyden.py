@@ -39,8 +39,8 @@ TOL_F       = 1e-9
 WEIGHT     = 1e-2
 NORM_FLOOR = 1e-10
 
-def modified_broyden_step(f_vec: np.ndarray, x_vec: np.ndarray, alpha: float, weight: float, 
-                          dF_hist: list, u_hist: list, x_prev: np.ndarray, f_prev: np.ndarray) -> np.ndarray:
+def modified_broyden_step(f_vec, x_vec, alpha: float, weight: float, 
+                          dF_hist: list, u_hist: list, x_prev, f_prev) -> np.ndarray:
     """One limited-memory modified-Broyden step. The history lists dF_hist and u_hist accumulate 
     the (normalized) residual differences and the vectors u = alpha * dFhat + dhhat"""
     if x_prev is None:
@@ -69,7 +69,6 @@ def iterate_broyden(epsilon_vec, U: float, t_mat, h_vec_guess, Z_vec_guess,
                     l_max: int, beta: float, N_sites: int, N_at: int, N_target: int, 
                     memory: int=8):
     """Calculate self-consistent parameters w/ modified Broyden's method"""  
-
     dF_hist, u_hist = [], []
     x_prev = f_prev = None
 

@@ -34,13 +34,15 @@ class ClusterSite1D:
 
     """Names of the converged quantities in iteration methods" return order.
     Parameter guesses looked for in nearest parameter lookup, needed for calling fresh iteration"""
-    _ITERATION_NAMES = ("h_vec", "J_eff_mat", "K_vec", "t_eff_mat", "renorm_mat", "phi_vec", "nf_vec", "L_vec", "mu", "count")
-    _NEAREST_NAMES = ("h_vec", "J_eff_mat", "K_vec", "t_eff_mat")
+    _ITERATION_NAMES = ("h_vec", "phi_vec", "J_eff_mat", "K_vec", "t_eff_mat", 
+                        "renorm_mat", "bond_vec", "nf_vec", "L_vec", "L2_vec", 
+                        "occ_vec", "rho_mat", "mu", "count")
+    _NEAREST_NAMES = ("h_vec", "phi_vec", "bond_vec")
 
     _ALGO_NAMES = ["BROYDEN", "NEWTON_GAUGE"]
 
     def __init__(self, epsilon_vec, U: float, t: float, l_max: int, beta: Union[float, None], 
-                 N_sites: int, N_at: int, PBC: bool=False, iteration_method: int=0, 
+                 N_sites: int, N_at: int, N_target: int, PBC: bool=False, iteration_method: int=0, 
                  use_cache: bool=True, cache_dir: str=None, try_nearest_params: bool=True, 
                  nearest_params_max_dist: float=0.3, print_cache_results: bool=False) -> None:
         """
@@ -76,8 +78,7 @@ class ClusterSite1D:
         
         """Hubbard parameters."""
         self._epsilon_vec = epsilon_vec 
-        self._U, self._beta, self._l_max, self._N_sites, self._N_at = U, beta, l_max, N_sites, N_at
-        self._N_target = int((N_sites * N_at) / 2.0) # Half-filling
+        self._U, self._beta, self._l_max, self._N_sites, self._N_at, self._N_target = U, beta, l_max, N_sites, N_at, N_target
 
         """Hopping matrix."""
         self._t_vec = np.atleast_1d(t)
@@ -86,7 +87,7 @@ class ClusterSite1D:
         """Caching and loading."""
         cache = IterationCache(cache_dir if cache_dir is not None else self._CACHE_DIR,
                                model_tag=self._MODEL_TAG, version=self._CACHE_VERSION)
-        params = dict(epsvec=epsilon_vec, U=U, t=t, beta=beta, lmax=l_max, Nsites=N_sites, Nat=N_at, PBC=PBC)
+        params = dict(epsvec=epsilon_vec, U=U, t=t, beta=beta, lmax=l_max, Nsites=N_sites, Nat=N_at, Ntarget=N_target, PBC=PBC)
         data = cache.load(params, self._ITERATION_NAMES) if use_cache else None
         
         if data is not None:
@@ -100,14 +101,20 @@ class ClusterSite1D:
             self._t_eff_mat    = data["t_eff_mat"]
 
             self._renorm_mat   = data["renorm_mat"]
+            self._bond_vec     = np.asarray(data["bond_vec"], float).copy()
             self._phi_vec      = np.asarray(data["phi_vec"], float).copy()
+
             self._nf_vec       = np.asarray(data["nf_vec"], float).copy()
             self._L_vec        = np.asarray(data["L_vec"], float).copy()
+            self._L2_vec       = np.asarray(data["L2_vec"], float).copy()
 
+            self._occ_vec      = np.asarray(data["occ_vec"], float).copy()
+            self._rho_mat      = data["rho_mat"]
+                                       
             self._mu           = float(data["mu"])
             self._count        = int(data["count"])
 
-            self._evals_spinon, self._evecs_spinon       = np.linalg.eigh(get_H_spinon(self._epsilon_vec, self._t_eff_mat, self._h_vec, self._mu))
+            self._evals_spinon, self._evecs_spinon       = np.linalg.eigh(get_H_spinon(self._epsilon_vec, self._t_eff_mat, self._h_vec))
             self._evals_rotor_vec, self._evecs_rotor_vec = get_rotor_eig_vec(self._U, self._J_eff_mat, self._K_vec, self._h_vec, self._l_max, self._N_sites)
 
             if print_cache_results:
@@ -116,25 +123,21 @@ class ClusterSite1D:
         else:
             # Failure to hit; default attempt params before nearest params check
             h_vec_guess     = -self._epsilon_vec
-            K_vec_guess     = np.full(self._N_sites, -1.0)
-
-            J_eff_mat_guess = 0.9 * self._t_mat
-            t_eff_mat_guess = 0.9 * self._t_mat
+            phi_vec_guess   = np.full(self._N_sites, 0.8)
+            bond_vec_guess  = np.full(self._N_cluster, 0.85)
 
             self._cache_status = "MISS"
             self._nearest_start_from = None
 
             # Search for nearest params 
             if use_cache and try_nearest_params:
-                near = cache.nearest(params, self._NEAREST_NAMES, must_match=("Nsites", "Nat", "PBC"))
+                near = cache.nearest(params, self._NEAREST_NAMES, must_match=("Nsites", "Nat", "Ntarget", "PBC"))
                 if near is not None and near["distance"] <= nearest_params_max_dist:
                     near_data = near["data"]
 
                     h_vec_guess     = np.asarray(near_data["h_vec"], float).copy()
-                    K_vec_guess     = np.asarray(near_data["K_vec"], float).copy()
-                    
-                    J_eff_mat_guess = near_data["J_eff_mat"]
-                    t_eff_mat_guess = near_data["t_eff_mat"]
+                    phi_vec_guess   = np.asarray(near_data["phi_vec"], float).copy()                    
+                    bond_vec_guess  = np.asarray(near_data["bond_vec"], float).copy()     
 
                     self._cache_status = "NEAREST"
 
@@ -142,17 +145,17 @@ class ClusterSite1D:
                         print(f"{self.__class__.__name__}.__init__: Nearest start from "
                               f"{near['params']} (dist = {near['distance']:.3f})")
                 else:
-                    print(f"{self.__class__.__name__}.__init__: Nearest start not available. Running {self._ALGO_NAMES[iteration_method]} iteration algorithm.")
+                    print(f"{self.__class__.__name__}.__init__: Nearest start not available. Running {self._ALGO_NAMES[iteration_method]} w/ default params.")
             
             if iteration_method == 0: # Iteration w/ Broyden's method
                 (
-                    self._evals_spinon, self._evecs_spinon, self._evals_rotor_vec, 
-                    self._evecs_rotor_vec, self._h_vec, self._t_eff_mat, self._J_eff_mat, 
-                    self._K_vec, self._renorm_mat, self._phi_vec, self._nf_vec, self._L_vec, self._mu, self._count
+                    self._evals_spinon, self._evecs_spinon, self._evals_rotor_vec, self._evecs_rotor_vec, 
+                    self._h_vec, self._phi_vec, self._t_eff_mat, self._J_eff_mat, self._K_vec,
+                    self._renorm_mat, self._bond_vec, self._nf_vec, self._L_vec, self._L2_vec,
+                    self._occ_vec, self._rho_mat, self._mu, self._count
                 ) = iterate_broyden(
-                    self._epsilon_vec, self._U, self._t_mat, h_vec_guess, t_eff_mat_guess,
-                    J_eff_mat_guess, K_vec_guess, self._beta, self._l_max, 
-                    self._N_sites, self._N_at, self._N_target
+                    self._epsilon_vec, self._U, self._t_mat, h_vec_guess, phi_vec_guess, bond_vec_guess,
+                    self._beta, self._l_max, self._N_sites, self._N_at, self._N_target
                 )
             else:
                 raise ValueError(f"{self.__class__.__name__}.__init__ | Error: Iteration argument value")
@@ -206,6 +209,17 @@ class ClusterSite1D:
         E_gs = self._N_at * E_gs_spinon + np.sum(E_gs_rotor_vec) + E0
         return E_gs
     
+    def get_energy_MF(self):
+        """Mean-field energy <psi|H|psi> for mean-field state:
+        E = sum_i eps_i n_i
+        - N_at sum_{i!=j} t_ij rho_ij sqrt(Z_i Z_j)
+        + U/2 sum_i [ <L_i^2> + (N_at - 1) <L_i> + N_at(N_at - 2)/4 ]"""
+        E_site = float(np.real(self._epsilon_vec) @ np.real(self._nf_vec))
+        E_hop = -float(self._N_at) * float(np.sum(np.real(self._t_eff_mat) * np.real(self._rho_mat)))
+        E_U = 0.5 * self._U * float(np.sum(self._L2_vec + (self._N_at - 1.0) * self._L_vec + self._N_at * (self._N_at - 2.0) / 4.0))
+        
+        return E_site + E_hop + E_U
+
     def get_Z_vec(self) -> np.ndarray:
         """Get quasiparticle spectral weight."""
         return self._Z_vec
