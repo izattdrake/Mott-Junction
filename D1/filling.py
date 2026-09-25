@@ -1,12 +1,13 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import time
 
 from SingleSite.single_site_1D import SingleSite1D
 from ClusterSite.cluster_site_1D import ClusterSite1D
 
+from Utility.plotting import save_axes_centered
+
 if __name__ == '__main__':
-    t, l_max, beta = 1.0, 10, None
+    t, l_max, beta = 1.0, 10, 30
     N_sites, N_at, N_target = 100, 2, 100
     
     interface_width = 5
@@ -33,17 +34,19 @@ if __name__ == '__main__':
 
     site_vals = np.arange(N_sites)
 
-    plt.figure(figsize=(6, 4))
-    plt.axhline(y=1.0, linestyle='--', color='black', alpha=0.7)
-    plt.grid(True, alpha=0.3)
+    fig, ax = plt.subplots(figsize=(6.5, 4.2))
 
-    plt.plot(np.arange(N_sites), single_filling, label='Single', marker='o', linestyle='-', color='dodgerblue')
-    plt.plot(np.arange(N_sites), cluster_filling, label='Cluster', marker='o', linestyle='-', color='tomato')
+    ax.axhline(y=1.0, linestyle='--', color='black', alpha=0.7)
 
-    plt.xlabel(r"Site", fontsize=16, labelpad=20)
-    plt.ylabel(r"$n^f$", rotation=0, fontsize=16, labelpad=20)
+    ax.plot(np.arange(N_sites), single_filling, label='Single', marker='o', linestyle='-', color='dodgerblue')
+    ax.plot(np.arange(N_sites), cluster_filling, label='Cluster', marker='o', linestyle='-', color='tomato')
 
-    plt.title(r"Filling w/ Doping at $T=0$: $U=$" + f"{U}")
+    ax.set_xlabel(r"Site", fontsize=16, labelpad=20)
+    ax.set_ylabel(r"$n^f$", rotation=0, fontsize=16, labelpad=20)
+    
+    ax.grid(True, alpha=0.3)
+    ax.legend()
 
-    plt.legend()
+    save_axes_centered(fig, ax, f"D1/filling_beta{beta}_lmax{l_max}_Nsites_{N_sites}_Nat_{N_at}_Ntarget_{N_target}.pdf")    
+
     plt.show()

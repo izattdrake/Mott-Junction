@@ -34,7 +34,7 @@ class Helpers:
         if beta is None:
             fd_vals = np.where(energies < mu, 1.0, np.where(energies > mu, 0.0, 0.5)) # E=mu returns 0.5 at zero-temperature
         else:
-            fd_vals = 0.5 * (1.0 - np.tanh(0.5 * beta * energies))
+            fd_vals = 0.5 * (1.0 - np.tanh(0.5 * beta * (energies - mu)))
 
         return fd_vals
 
