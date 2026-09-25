@@ -7,7 +7,7 @@ from ClusterSite.cluster_site_1D import ClusterSite1D
 
 if __name__ == '__main__':
     t, l_max, beta = 1.0, 10, None
-    N_sites, N_at, N_target = 50, 2, 50
+    N_sites, N_at, N_target = 100, 2, 100
     
     interface_width = 5
     site_indices = np.arange(N_sites)
@@ -19,7 +19,7 @@ if __name__ == '__main__':
     """Junction with hyperbolic tangent profile"""
     epsilon_vec = -0.25 * np.tanh((site_indices - int(N_sites/2.0)) / interface_width) - 0.25
     
-    U = 0.5
+    U = 1.0
 
     single_chain = SingleSite1D(epsilon_vec, U, t, l_max, beta, 
                                 N_sites, N_at, N_target, 

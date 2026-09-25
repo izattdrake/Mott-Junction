@@ -110,10 +110,11 @@ def get_t_eff_mat(t_mat, renorm_mat) -> np.ndarray:
     return t_mat * renorm_mat
 
 def get_rho_mat(evecs_spinon, occ_vec):
-    """Calculate the thermal hopping matrix rho_{ij} = <f^+_j f_i>.
+    """Calculate the thermal hopping matrix rho_{ij} = <f^+_i f_j>.
     NOTE: Other implementations have it wrong; need to flip i<->j.
-    Fine if everything's real, must be changed if complex."""
-    return (evecs_spinon * occ_vec[np.newaxis, :]) @ evecs_spinon.conj().T
+    Fine if everything's real, must be changed if complex This is
+    correct."""
+    return (evecs_spinon.conj() * occ_vec[np.newaxis, :]) @ evecs_spinon.T
 
 def get_nf_vec(evecs_spinon, occ_vec, N_at: int) -> np.ndarray:
     """Calculate spinon occupation at all sites"""
