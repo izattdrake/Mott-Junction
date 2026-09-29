@@ -1,15 +1,16 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from SingleSite.single_site_1D import SingleSite1D
-from ClusterSite.cluster_site_1D import ClusterSite1D
+from SingleSite.single_site_1D import SingleSite_1D
+from ClusterSite2.cluster_site_2_1D import ClusterSite2_1D
+from ClusterSite4.cluster_site_4_1D import ClusterSite4_1D
 
 from Utility.plotting import save_axes_centered
 
 if __name__ == '__main__':
     t, l_max, beta = 1.0, 10, 30
     N_sites, N_at, N_target = 100, 2, 100
-    
+    PBC=False
     interface_width = 5
     site_indices = np.arange(N_sites)
     
@@ -22,15 +23,21 @@ if __name__ == '__main__':
     
     U = 1.0
 
-    single_chain = SingleSite1D(epsilon_vec, U, t, l_max, beta, 
-                                N_sites, N_at, N_target, 
+    single_chain = SingleSite_1D(epsilon_vec, U, t, l_max, beta, 
+                                N_sites, N_at, N_target, PBC=PBC,
                                 print_cache_results=True)
-    cluster_chain = ClusterSite1D(epsilon_vec, U, t, l_max, beta,
-                                  N_sites, N_at, N_target, 
+    
+    cluster2_chain = ClusterSite2_1D(epsilon_vec, U, t, l_max, beta,
+                                  N_sites, N_at, N_target, PBC=PBC,
+                                  print_cache_results=True)
+
+    cluster4_chain = ClusterSite4_1D(epsilon_vec, U, t, l_max, beta,
+                                  N_sites, N_at, N_target, PBC=PBC,
                                   print_cache_results=True)
 
     single_filling = single_chain.get_filling_vec()
-    cluster_filling = cluster_chain.get_filling_vec()
+    cluster2_filling = cluster2_chain.get_filling_vec()
+    cluster4_filling = cluster4_chain.get_filling_vec()
 
     site_vals = np.arange(N_sites)
 
@@ -39,7 +46,8 @@ if __name__ == '__main__':
     ax.axhline(y=1.0, linestyle='--', color='black', alpha=0.7)
 
     ax.plot(np.arange(N_sites), single_filling, label='Single', marker='o', linestyle='-', color='dodgerblue')
-    ax.plot(np.arange(N_sites), cluster_filling, label='Cluster', marker='o', linestyle='-', color='tomato')
+    ax.plot(np.arange(N_sites), cluster2_filling, label='Cluster 2', marker='o', linestyle='-', color='tomato')
+    ax.plot(np.arange(N_sites), cluster4_filling, label='Cluster 4', marker='o', linestyle='-', color='slategrey')
 
     ax.set_xlabel(r"Site", fontsize=16, labelpad=20)
     ax.set_ylabel(r"$n^f$", rotation=0, fontsize=16, labelpad=20)

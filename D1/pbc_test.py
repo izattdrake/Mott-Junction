@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from SingleSite.single_site_1D import SingleSite1D
+from D1.SingleSite.single_site_1D import SingleSite_1D
 from ClusterSite.cluster_site_1D import ClusterSite1D
 
 N_sites = 50
@@ -14,7 +14,7 @@ Egs_single, Egs_cluster = [], []
 count = 1
 
 for U in U_vals:
-    sys_single = SingleSite1D(
+    sys_single = SingleSite_1D(
         epsilon_vec, U, t, l_max, beta=None, N_sites=N_sites, PBC=True, 
         N_at=2, N_target=2, iteration_method=0, print_cache_results=True
     )

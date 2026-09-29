@@ -31,7 +31,7 @@ from Utility.iteration_cache import IterationCache
 #   multiple are used to calculate and compare results. 
 # ====================================================================
 
-class SingleSite1D:
+class SingleSite_1D:
     _CACHE_VERSION = 1.0
     _CACHE_DIR = Path(__file__).resolve().parent / '_cache'
     _MODEL_TAG = "single_site_1D"

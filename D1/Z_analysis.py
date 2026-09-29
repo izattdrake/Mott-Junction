@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 
-from SingleSite.single_site_1D import SingleSite1D
+from D1.SingleSite.single_site_1D import SingleSite_1D
 
 if __name__ == '__main__':
     t, l_max, N_sites = 1.0, 15, 50
@@ -12,7 +12,7 @@ if __name__ == '__main__':
     Z_vals = []
     count = 1
     for U in U_vals:
-        chain = SingleSite1D(
+        chain = SingleSite_1D(
             epsilon_vec, U, t, l_max, beta=None, N_sites=N_sites, 
             N_at=2, use_cache=None, iteration_method=0
         )
